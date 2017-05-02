@@ -8,9 +8,16 @@ GUI based application for finding yield signs.
 """
 
 import sys
+import logging
+import logging.config
 import argparse
 
+
 import PyQt5.QtWidgets as qtw
+
+
+logging.config.fileConfig('logging.conf')
+log = logging.getLogger(name=__name__[2:-2])
 
 
 class MainWindow(qtw.QMainWindow):
@@ -110,11 +117,22 @@ def parse_args():
         nargs=1, type=str,
         help='open a file directly')
 
+    parser.add_argument(
+        '--log',
+        type=str, choices=['debug', 'info', 'error'],
+        help='set the log level')
+
     return parser.parse_args()
 
 
 def main(args):
     fname = None if args.fname is None else args.fname[0]
+    if args.log is not None:
+        log.setLevel(args.log.upper())
+
+    # ---
+
+    log.info('starting the application')
     app = qtw.QApplication(sys.argv)
     win = MainWindow(app, fname=fname) # noqa  # pylint: disable=unused-import
     sys.exit(app.exec_())
