@@ -12,9 +12,11 @@ import logging
 import logging.config
 import argparse
 
-
+import numpy as np
+import scipy.ndimage as spnd
 import PyQt5.QtWidgets as qtw
 
+from src import gui
 
 logging.config.fileConfig('logging.conf')
 log = logging.getLogger(name=__name__[2:-2])
@@ -45,7 +47,11 @@ class MainWindow(qtw.QMainWindow):
     # --- handler
 
     def _handle_load_file(self):
-        print('load file')
+        fname, _ = qtw.QFileDialog.getOpenFileName(
+            self, 'Open bitmap')
+
+        if fname:
+            self.load_file(fname)
 
     # --- initialization
 
@@ -65,6 +71,15 @@ class MainWindow(qtw.QMainWindow):
         menu = self.menuBar()
         self._init_file_menu(menu)
 
+    def _init_main(self, arr: np.ndarray) -> None:
+        centralWidget = qtw.QWidget()
+        self.layout = qtw.QVBoxLayout()
+        self.module = gui.ImageModule(arr)
+        self.layout.addWidget(self.module, stretch=1)
+
+        centralWidget.setLayout(self.layout)
+        self.setCentralWidget(centralWidget)
+
     def __init__(self, app: qtw.QApplication, fname=None):
         super().__init__()
         self.setMouseTracking(True)
@@ -78,6 +93,10 @@ class MainWindow(qtw.QMainWindow):
         # initialize
         self._init_menu()
         self.setWindowTitle('Detect me some yield signs')
+
+        if fname is not None:
+            self.load_file(fname)
+
         self.message('Ready')
         self.show()
 
@@ -103,6 +122,11 @@ class MainWindow(qtw.QMainWindow):
         else:
             bar.showMessage(msg, time)
 
+    def load_file(self, fname: str) -> None:
+        print('opening %s' % (fname,))
+        arr = spnd.imread(fname, 0)
+        self._init_main(arr)
+        self.message('Finished loading bitmap', 2000)
 
 #
 # --- initialization
