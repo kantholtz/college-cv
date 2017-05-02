@@ -1,0 +1,4 @@
+pyqt5
+
+pylint
+flake8
