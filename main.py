@@ -8,8 +8,6 @@ GUI based application for finding yield signs.
 """
 
 import sys
-import logging
-import logging.config
 import argparse
 
 import numpy as np
@@ -17,12 +15,17 @@ import scipy.ndimage as spnd
 import PyQt5.QtWidgets as qtw
 
 from src import gui
+from src import logger
+from src import pipeline
 
-logging.config.fileConfig('logging.conf')
-log = logging.getLogger(name=__name__[2:-2])
+log = logger(name=__name__[2:-2])
 
 
 class MainWindow(qtw.QMainWindow):
+
+    @property
+    def tab_widget(self) -> qtw.QTabWidget:
+        return self._tab_widget
 
     def _action(self, text, handler, tip=None, shortcut=None):
         action = qtw.QAction(text, self)
@@ -55,6 +58,16 @@ class MainWindow(qtw.QMainWindow):
 
     # --- initialization
 
+    def _build_pipeline(self, module) -> None:
+        log.info('initializing pipeline')
+        pl = pipeline.Pipeline(module, self.tab_widget)
+        pl.add_module('select', pipeline.Select(pl))
+
+        pl.run()
+
+        log.info('drawing results')
+        module.add_view(pl.modules['select'].arr)
+
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
         actions = [
             self._action(
@@ -72,13 +85,19 @@ class MainWindow(qtw.QMainWindow):
         self._init_file_menu(menu)
 
     def _init_main(self, arr: np.ndarray) -> None:
-        centralWidget = qtw.QWidget()
-        self.layout = qtw.QVBoxLayout()
-        self.module = gui.ImageModule(arr)
-        self.layout.addWidget(self.module, stretch=1)
+        self._tab_widget = qtw.QTabWidget()
 
-        centralWidget.setLayout(self.layout)
-        self.setCentralWidget(centralWidget)
+        layout = qtw.QVBoxLayout()
+        module = gui.ImageModule(arr)
+        layout.addWidget(module, stretch=1)
+
+        origin = qtw.QWidget()
+        origin.setLayout(layout)
+
+        self.tab_widget.addTab(origin, 'Source')
+        self.setCentralWidget(self.tab_widget)
+
+        self._build_pipeline(module)
 
     def __init__(self, app: qtw.QApplication, fname=None):
         super().__init__()
@@ -123,7 +142,7 @@ class MainWindow(qtw.QMainWindow):
             bar.showMessage(msg, time)
 
     def load_file(self, fname: str) -> None:
-        print('opening %s' % (fname,))
+        log.info('opening %s', fname)
         arr = spnd.imread(fname, 0)
         self._init_main(arr)
         self.message('Finished loading bitmap', 2000)
@@ -141,18 +160,11 @@ def parse_args():
         nargs=1, type=str,
         help='open a file directly')
 
-    parser.add_argument(
-        '--log',
-        type=str, choices=['debug', 'info', 'error'],
-        help='set the log level')
-
     return parser.parse_args()
 
 
 def main(args):
     fname = None if args.fname is None else args.fname[0]
-    if args.log is not None:
-        log.setLevel(args.log.upper())
 
     # ---
 

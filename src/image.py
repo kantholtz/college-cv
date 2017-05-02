@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 
-import logging
 from datetime import datetime
 
 import numpy as np
@@ -10,9 +9,9 @@ import PyQt5.QtCore as qtc
 import PyQt5.QtWidgets as qtw
 import qimage2ndarray as qim2nd
 
+from . import logger
 
-logging.config.fileConfig('logging.conf')
-log = logging.getLogger(name=__name__[2:-2])
+log = logger(name=__name__)
 
 
 class Image(qtw.QWidget):
