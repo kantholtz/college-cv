@@ -14,18 +14,13 @@ import numpy as np
 import scipy.ndimage as spnd
 import PyQt5.QtWidgets as qtw
 
-from src import gui_image
 from src import logger
-from src import pipeline
+from src import gui_pipeline
 
 log = logger(name=__name__[2:-2])
 
 
 class MainWindow(qtw.QMainWindow):
-
-    @property
-    def tab_widget(self) -> qtw.QTabWidget:
-        return self._tab_widget
 
     def _action(self, text, handler, tip=None, shortcut=None):
         action = qtw.QAction(text, self)
@@ -58,20 +53,6 @@ class MainWindow(qtw.QMainWindow):
 
     # --- initialization
 
-    def _build_pipeline(self, module) -> None:
-        log.info('initializing pipeline')
-        pl = pipeline.Pipeline(module.view.image.arr)
-
-        pl + pipeline.Binarize('binarize')
-        pl + pipeline.Morph('morph')
-
-        pl.run()
-
-        log.info('drawing results')
-        mod_binarized = gui_image.ImageModule(pl['binarize'].arr)
-        mod_binarized.add_view(pl['morph'].arr, stats_right=True)
-        self._tab_widget.addTab(mod_binarized, 'Binarized')
-
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
         actions = [
             self._action(
@@ -89,19 +70,9 @@ class MainWindow(qtw.QMainWindow):
         self._init_file_menu(menu)
 
     def _init_main(self, arr: np.ndarray) -> None:
-        self._tab_widget = qtw.QTabWidget()
-
-        layout = qtw.QVBoxLayout()
-        module = gui_image.ImageModule(arr)
-        layout.addWidget(module, stretch=1)
-
-        origin = qtw.QWidget()
-        origin.setLayout(layout)
-
-        self.tab_widget.addTab(origin, 'Source')
-        self.setCentralWidget(self.tab_widget)
-
-        self._build_pipeline(module)
+        tabs = qtw.QTabWidget()
+        self.setCentralWidget(tabs)
+        gui_pipeline.PipelineGUI(self, tabs, arr)
 
     def __init__(self, app: qtw.QApplication, fname=None):
         super().__init__()

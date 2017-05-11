@@ -45,6 +45,8 @@ class Pipeline():
         raise TypeError
 
     def __add__(self, mod):
+        log.info('adding mod "%s" to pipeline', mod.name)
+
         mod.pipeline = self
         self._module_names.append(mod.name)
         self._modules[mod.name] = mod
