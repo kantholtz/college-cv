@@ -1,8 +1,9 @@
 pyqt5
 scipy
 pillow
+scikit-image
+qimage2ndarray
 
 pylint
 flake8
 ipython
-qimage2ndarray

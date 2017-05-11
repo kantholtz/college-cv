@@ -67,6 +67,7 @@ class PipelineGUI():
         # add tabs, initialize pipeline
         self._pipeline = pl.Pipeline(arr)
         self + Preprocessing()
+        self + Hough()
 
         # fire in the hole
         for tab in self:
@@ -214,6 +215,25 @@ class Preprocessing(Tab):
             self.widget.view.image.arr = self._mod_binarize.arr
             self._view_morph.image.arr = self._mod_morph.arr
             self._view_fill.image.arr = self._mod_fill.arr
+
+        except AttributeError:
+            self._init_gui()
+
+
+class Hough(Tab):
+
+    def _init_gui(self):
+        self._widget = gui_image.ImageModule(self._mod_hough.arr)
+
+    def __init__(self):
+        super().__init__('Hough Selection')
+        self._mod_hough = pl.Hough('hough')
+        for mod in [self._mod_hough]:
+            self + mod
+
+    def update(self):
+        try:
+            self.widget.view.image.arr = self._mod_hough.arr
 
         except AttributeError:
             self._init_gui()

@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 
 
+import math
 from datetime import datetime
 
 import numpy as np
+import skimage.draw as skd
 import scipy.ndimage as scnd
-from . import logger
+import skimage.transform as skt
 
+from . import logger
 log = logger(__name__)
 
 
 # ---
 
 
-def norm(arr):
+def _norm(arr):
     # fmt = '%s (%s) - min: %d, max: %d'
     # print(fmt % ('normalizing: ', arr.shape, np.min(arr), np.max(arr)))
 
@@ -28,6 +31,51 @@ def norm(arr):
     norm = (arr / a_max) * 255
     # print(fmt % ('result: ', arr.shape, np.min(norm), np.max(norm)))
     return norm.astype(np.uint8)
+
+
+# _sin = {a: math.sin(math.radians(a)) for a in range(180)}
+# _cos = {a: math.cos(math.radians(a)) for a in range(180)}
+
+
+# def _hess2point(h, w):
+
+#     h_bound = h - 1
+#     w_bound = w - 1
+
+#     # max_rad = int(round(math.sqrt(h**2 + w**2) + .5))
+
+#     def in_img(p):
+#         y, x = p
+#         return 0 <= y and y < h and 0 <= x and x < w
+
+#     def get(a, r):
+#         # print('get points: a=%d, r=%d' % (a, r))
+#         if a == 0:
+#             off = min(r, w_bound)
+#             return (0, off), (h_bound, off)
+
+#         if a == 90:
+#             off = min(r, h_bound)
+#             return (off, 0), (off, w_bound)
+
+#         # if a > 90:
+#         #     r = -max_rad + r
+
+#         p_lt = r / _sin[a], 0
+#         p_rt = (-w_bound * _cos[a] + r) / _sin[a], w_bound
+#         p_up = 0, r / _cos[a]
+#         p_dn = h_bound, (-h_bound * _sin[a] + r) / _cos[a]
+
+#         points = (tuple(int(round(t)) for t in p)
+#                   for p in (p_lt, p_rt, p_up, p_dn))
+
+#         # print('a=%d, r=%d, cos=%f, sin=%f' % (
+#         #     a, r, self.cos[a], sin[a]))
+
+#         # print('pre filter: %s' % str(tuple(points)))
+#         return tuple(filter(in_img, points))
+
+#     return get
 
 
 # ---
@@ -182,4 +230,32 @@ class Fill(Module):
 
         tgt = np.copy(src)
         tgt[labeled == max_label] = 255
+        return tgt
+
+
+class Hough(Module):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self) -> np.ndarray:
+        log.info('detecting lines via hough transformation')
+
+        src = self.pipeline[-1].arr
+        tgt = self.pipeline[0].arr / 3
+
+        _, angles, dists = skt.hough_line_peaks(
+            *skt.hough_line(src),
+            min_angle=30,
+            min_distance=10)
+
+        for a, r in zip(np.rad2deg(angles), dists):
+            log.info('looking at a=%s, r=%s', str(a), str(r))
+
+        # lines = skt.probabilistic_hough_line(src, threshold=0.5)
+        # tgt = np.copy(self.pipeline[0].arr)
+
+        # for points in [np.asarray(l)[:, ::-1] for l in lines]:
+        #     tgt[skd.line(*np.ravel(points))] = 1
+
         return tgt

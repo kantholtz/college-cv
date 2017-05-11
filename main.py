@@ -73,6 +73,7 @@ class MainWindow(qtw.QMainWindow):
         tabs = qtw.QTabWidget()
         self.setCentralWidget(tabs)
         gui_pipeline.PipelineGUI(self, tabs, arr)
+        tabs.setCurrentIndex(2)
 
     def __init__(self, app: qtw.QApplication, fname=None):
         super().__init__()
