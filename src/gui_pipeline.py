@@ -155,8 +155,8 @@ class Preprocessing(Tab):
 
     def _init_gui(self):
         self._widget = gui_image.ImageModule(self._mod_binarize.arr)
-        self._view_morph = self.widget.add_view(
-            self._mod_morph.arr, stats_right=True)
+        self._view_morph = self.widget.add_view(self._mod_morph.arr)
+        self._view_fill = self.widget.add_view(self._mod_fill.arr)
 
         # ---
 
@@ -204,14 +204,16 @@ class Preprocessing(Tab):
 
         self._mod_binarize = pl.Binarize('binarize')
         self._mod_morph = pl.Morph('morph')
+        self._mod_fill = pl.Fill('fill')
 
-        for mod in [self._mod_binarize, self._mod_morph]:
+        for mod in [self._mod_binarize, self._mod_morph, self._mod_fill]:
             self + mod
 
     def update(self):
         try:
             self.widget.view.image.arr = self._mod_binarize.arr
             self._view_morph.image.arr = self._mod_morph.arr
+            self._view_fill.image.arr = self._mod_fill.arr
 
         except AttributeError:
             self._init_gui()

@@ -155,9 +155,31 @@ class Morph(Module):
         self._iterations = 2
 
     def execute(self) -> np.ndarray:
-        log.info('applying morphological operations')
+        log.info('dilate with %d iterations', self.iterations)
         src = self.pipeline[-1].arr
         tgt = np.zeros(src.shape)
-        tgt[src == 0] = 255
-        tgt[scnd.binary_dilation(tgt, iterations=self.iterations)] = 255
+        tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
+        return tgt
+
+
+class Fill(Module):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self) -> np.ndarray:
+        src = self.pipeline[-1].arr
+        labeled, labels = scnd.label(np.invert(src.astype(np.bool)))
+
+        max_count = 0
+        max_label = -1
+
+        for i in range(labels):
+            count = np.count_nonzero(labeled == i)
+            if count > max_count:
+                max_count = count
+                max_label = i
+
+        tgt = np.copy(src)
+        tgt[labeled == max_label] = 255
         return tgt
