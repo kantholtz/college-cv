@@ -141,12 +141,22 @@ class Binarize(Module):
 
 class Morph(Module):
 
+    @property
+    def iterations(self):
+        return self._iterations
+
+    @iterations.setter
+    def iterations(self, iterations: int):
+        assert type(iterations) is int
+        self._iterations = iterations
+
     def __init__(self, name: str):
         super().__init__(name)
+        self._iterations = 2
 
     def execute(self) -> np.ndarray:
         log.info('applying morphological operations')
         src = self.pipeline[-1].arr
         tgt = np.zeros(src.shape)
-        tgt[scnd.binary_dilation(src)] = 255
+        tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
         return tgt

@@ -140,9 +140,17 @@ class Preprocessing(Tab):
     BIN_SLIDER_MAX = 100
     BIN_SLIDER_FAC = 100
 
+    MORPH_SLIDER_MIN = 1
+    MORPH_SLIDER_MAX = 10
+
     def _update_bin_threshold(self):
         val = self._slider_bin.value() / Preprocessing.BIN_SLIDER_FAC
         self._mod_binarize.threshold = val
+        self.ping()
+
+    def _update_morph_iterations(self):
+        val = self._slider_morph.value()
+        self._mod_morph.iterations = val
         self.ping()
 
     def _init_gui(self):
@@ -170,6 +178,22 @@ class Preprocessing(Tab):
         slider.sliderReleased.connect(self._update_bin_threshold)
         layout.addWidget(slider)
         self._slider_bin = slider
+
+        # ---
+
+        layout.addWidget(qtw.QLabel('Dilation iterations'))
+        slider = self._slider_sobel = qtw.QSlider(qtc.Qt.Horizontal, self)
+        slider.setFocusPolicy(qtc.Qt.NoFocus)
+
+        slider.setMinimum(Preprocessing.MORPH_SLIDER_MIN)
+        slider.setMaximum(Preprocessing.MORPH_SLIDER_MAX)
+
+        val = self._mod_morph.iterations
+        slider.setValue(val)
+
+        slider.sliderReleased.connect(self._update_morph_iterations)
+        layout.addWidget(slider)
+        self._slider_morph = slider
 
         # ---
 
