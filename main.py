@@ -60,13 +60,17 @@ class MainWindow(qtw.QMainWindow):
 
     def _build_pipeline(self, module) -> None:
         log.info('initializing pipeline')
-        pl = pipeline.Pipeline(module, self.tab_widget)
-        pl.add_module('select', pipeline.Select(pl))
+        pl = pipeline.Pipeline(module.view.image.arr)
+
+        pl + pipeline.Binarize('binarize')
+        pl + pipeline.Morph('morph')
 
         pl.run()
 
         log.info('drawing results')
-        module.add_view(pl.modules['select'].arr)
+        mod_binarized = gui.ImageModule(pl['binarize'].arr)
+        mod_binarized.add_view(pl['morph'].arr)
+        self._tab_widget.addTab(mod_binarized, 'Binarized')
 
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
         actions = [

@@ -4,9 +4,7 @@
 from datetime import datetime
 
 import numpy as np
-import PyQt5.QtWidgets as qtw
-
-from . import gui
+import scipy.ndimage as scnd
 from . import logger
 
 log = logger(__name__)
@@ -37,37 +35,43 @@ def norm(arr):
 
 class Pipeline():
 
-    @property
-    def main_module(self) -> gui.ImageModule:
-        return self._main_module
+    def __getitem__(self, key):
+        if type(key) is int:
+            return self._modules_executed[key]
 
-    @property
-    def tab_widget(self) -> qtw.QTabWidget:
-        return self._tab_widget
+        if type(key) is str:
+            return self._modules[key]
 
-    @property
-    def modules(self) -> dict:
-        return self._modules
+        raise TypeError
+
+    def __add__(self, mod):
+        mod.pipeline = self
+        self._module_names.append(mod.name)
+        self._modules[mod.name] = mod
+
+        return self
 
     # --- initialization
 
-    def __init__(self, main_module, tab_widget):
-        self._main_module = main_module
-        self._tab_widget = tab_widget
-        self._modules_ordered = []
+    def __init__(self, arr):
+        self._modules_executed = []
         self._modules = {}
+        self._module_names = []
 
-    def add_module(self, name, module) -> None:
-        self._modules_ordered.append(name)
-        self._modules[name] = module
+        # set up initial module
+        initial = Module(self)
+        initial.arr = arr
+        self._modules_executed.append(initial)
 
     def run(self):
         t_start = datetime.now()
         log.info('>>> running pipeline')
 
-        for mod in self._modules_ordered:
-            log.debug('executing module %s', mod)
-            self.modules[mod].execute()
+        for name in self._module_names:
+            log.debug('executing module %s', name)
+            mod = self._modules[name]
+            mod.arr = mod.execute()
+            self._modules_executed.append(mod)
 
         log.info('>>> finished pipeline in %sms',
                  (datetime.now() - t_start).microseconds / 1000)
@@ -76,11 +80,28 @@ class Pipeline():
 class Module():
 
     @property
+    def name(self) -> str:
+        return self._name
+
+    @property
     def pipeline(self) -> Pipeline:
         return self._pipeline
 
-    def __init__(self, pipeline):
-        self._pipeline = pipeline
+    @pipeline.setter
+    def pipeline(self, pl: Pipeline):
+        self._pipeline = pl
+
+    @property
+    def arr(self):
+        return self._arr
+
+    @arr.setter
+    def arr(self, arr):
+        assert 0 <= np.amin(arr) and np.amax(arr) <= 255
+        self._arr = arr
+
+    def __init__(self, name: str):
+        self._name = name
 
     def execute(self) -> None:
         raise NotImplementedError
@@ -88,16 +109,40 @@ class Module():
 # ---
 
 
-class Select(Module):
+class Binarize(Module):
 
-    def __init__(self, pipeline):
-        super().__init__(pipeline)
+    @property
+    def threshold(self):
+        return self._threshold
 
-    def execute(self) -> None:
-        log.info('select: exposing red color')
-        src = self.pipeline.main_module.view.image.arr.astype(np.int64)
+    @threshold.setter
+    def threshold(self, threshold: float):
+        assert 0 <= threshold and threshold <= 1
+        self._threshold = threshold
+
+    def __init__(self, name: str):
+        super().__init__(name)
+        self._threshold = 0.3
+
+    def execute(self) -> np.ndarray:
+        log.info('binarize: using a threshold of %f' % self.threshold)
+        src = self.pipeline[-1].arr.astype(np.int64)
+        e = 255 * self.threshold
 
         tgt = src[:, :, 0] - (src[:, :, 1] + src[:, :, 2])
-        tgt[tgt < 0] = 0
+        tgt[tgt < e] = 0
+        tgt[tgt > e] = 255
 
-        self.arr = tgt
+        return tgt
+
+
+class Morph(Module):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self) -> np.ndarray:
+        src = self.pipeline[-1].arr
+        tgt = np.zeros(src.shape)
+        tgt[scnd.binary_dilation(src)] = 255
+        return tgt
