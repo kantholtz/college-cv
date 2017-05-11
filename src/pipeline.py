@@ -127,9 +127,9 @@ class Binarize(Module):
     def execute(self) -> np.ndarray:
         log.info('binarize: using a threshold of %f' % self.threshold)
         src = self.pipeline[-1].arr.astype(np.int64)
-        e = 255 * self.threshold
-
         tgt = src[:, :, 0] - (src[:, :, 1] + src[:, :, 2])
+
+        e = 255 * self.threshold
         tgt[tgt < e] = 0
         tgt[tgt > e] = 255
 

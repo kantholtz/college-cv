@@ -14,7 +14,7 @@ import numpy as np
 import scipy.ndimage as spnd
 import PyQt5.QtWidgets as qtw
 
-from src import gui
+from src import gui_image
 from src import logger
 from src import pipeline
 
@@ -68,8 +68,8 @@ class MainWindow(qtw.QMainWindow):
         pl.run()
 
         log.info('drawing results')
-        mod_binarized = gui.ImageModule(pl['binarize'].arr)
-        mod_binarized.add_view(pl['morph'].arr)
+        mod_binarized = gui_image.ImageModule(pl['binarize'].arr)
+        mod_binarized.add_view(pl['morph'].arr, stats_right=True)
         self._tab_widget.addTab(mod_binarized, 'Binarized')
 
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
@@ -92,7 +92,7 @@ class MainWindow(qtw.QMainWindow):
         self._tab_widget = qtw.QTabWidget()
 
         layout = qtw.QVBoxLayout()
-        module = gui.ImageModule(arr)
+        module = gui_image.ImageModule(arr)
         layout.addWidget(module, stretch=1)
 
         origin = qtw.QWidget()
