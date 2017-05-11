@@ -8,6 +8,7 @@ Maintains the processing pipeline and handles displaying processing steps
 
 
 import numpy as np
+import PyQt5.QtCore as qtc
 import PyQt5.QtWidgets as qtw
 
 from . import logger
@@ -15,20 +16,6 @@ from . import gui_image
 from . import pipeline as pl
 
 log = logger(name=__name__)
-
-# def _build_pipeline(self, module) -> None:
-#     log.info('initializing pipeline')
-#     pl = pipeline.Pipeline(module.view.image.arr)
-
-#     pl + pipeline.Binarize('binarize')
-#     pl + pipeline.Morph('morph')
-
-#     pl.run()
-
-#     log.info('drawing results')
-#     mod_binarized = gui_image.ImageModule(pl['binarize'].arr)
-#     mod_binarized.add_view(pl['morph'].arr, stats_right=True)
-#     self._tab_widget.addTab(mod_binarized, 'Binarized')
 
 
 class PipelineGUI():
@@ -83,6 +70,7 @@ class PipelineGUI():
 
         # fire in the hole
         for tab in self:
+            tab.ping = self.update
             for mod in tab:
                 self.pipeline + mod
 
@@ -103,7 +91,7 @@ class PipelineGUI():
             self._initialized = True
 
 
-class Tab():
+class Tab(qtw.QWidget):
 
     @property
     def name(self) -> str:
@@ -122,12 +110,25 @@ class Tab():
         return self._mods.__iter__()
 
     def __init__(self, name: str):
+        super().__init__()
         self._name = name
         self._mods = []
 
     # interface
 
+    def ping(self):
+        """
+        Re-run the processing pipeline.
+        This method is overwritten by PipelineGUI.
+
+        """
+        raise NotImplementedError
+
     def update(self):
+        """
+        To update the views of the tab with recently computed images
+
+        """
         raise NotImplementedError
 
 # ---
@@ -135,10 +136,44 @@ class Tab():
 
 class Preprocessing(Tab):
 
+    BIN_SLIDER_MIN = 1
+    BIN_SLIDER_MAX = 100
+    BIN_SLIDER_FAC = 100
+
+    def _update_bin_threshold(self):
+        val = self._slider_bin.value() / Preprocessing.BIN_SLIDER_FAC
+        self._mod_binarize.threshold = val
+        self.ping()
+
     def _init_gui(self):
         self._widget = gui_image.ImageModule(self._mod_binarize.arr)
         self._view_morph = self.widget.add_view(
             self._mod_morph.arr, stats_right=True)
+
+        # ---
+
+        controls = self.widget.view.controls
+        layout = qtw.QVBoxLayout()
+
+        # ---
+
+        layout.addWidget(qtw.QLabel('Binarization threshold'))
+        slider = self._slider_sobel = qtw.QSlider(qtc.Qt.Horizontal, self)
+        slider.setFocusPolicy(qtc.Qt.NoFocus)
+
+        slider.setMinimum(Preprocessing.BIN_SLIDER_MIN)
+        slider.setMaximum(Preprocessing.BIN_SLIDER_MAX)
+
+        val = self._mod_binarize.threshold * Preprocessing.BIN_SLIDER_FAC
+        slider.setValue(val)
+
+        slider.sliderReleased.connect(self._update_bin_threshold)
+        layout.addWidget(slider)
+        self._slider_bin = slider
+
+        # ---
+
+        controls.addLayout(layout)
 
     def __init__(self):
         super().__init__('Preprocessing')
@@ -152,7 +187,7 @@ class Preprocessing(Tab):
     def update(self):
         try:
             self.widget.view.image.arr = self._mod_binarize.arr
-            self._view_morph = self._mod_morph.arr
+            self._view_morph.image.arr = self._mod_morph.arr
 
         except AttributeError:
             self._init_gui()

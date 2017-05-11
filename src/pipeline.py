@@ -61,14 +61,14 @@ class Pipeline():
         self._module_names = []
 
         # set up initial module
-        initial = Module(self)
-        initial.arr = arr
-        self._modules_executed.append(initial)
+        self._mod_initial = Module('_')
+        self._mod_initial.arr = arr
 
     def run(self):
         t_start = datetime.now()
         log.info('>>> running pipeline')
 
+        self._modules_executed = [self._mod_initial]
         for name in self._module_names:
             log.debug('executing module %s', name)
             mod = self._modules[name]
@@ -103,6 +103,7 @@ class Module():
         self._arr = arr
 
     def __init__(self, name: str):
+        assert type(name) is str
         self._name = name
 
     def execute(self) -> None:
@@ -144,6 +145,7 @@ class Morph(Module):
         super().__init__(name)
 
     def execute(self) -> np.ndarray:
+        log.info('applying morphological operations')
         src = self.pipeline[-1].arr
         tgt = np.zeros(src.shape)
         tgt[scnd.binary_dilation(src)] = 255
