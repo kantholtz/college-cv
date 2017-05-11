@@ -158,5 +158,6 @@ class Morph(Module):
         log.info('applying morphological operations')
         src = self.pipeline[-1].arr
         tgt = np.zeros(src.shape)
-        tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
+        tgt[src == 0] = 255
+        tgt[scnd.binary_dilation(tgt, iterations=self.iterations)] = 255
         return tgt
