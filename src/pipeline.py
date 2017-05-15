@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 
 
-import math
+# import math
 from datetime import datetime
 
 import numpy as np
-import skimage.draw as skd
+# import skimage.draw as skd
 import scipy.ndimage as scnd
-import skimage.transform as skt
+# import skimage.transform as skt
 
 from . import logger
 log = logger(__name__)
@@ -171,14 +171,27 @@ class Binarize(Module):
         assert 0 <= threshold and threshold <= 1
         self._threshold = threshold
 
+    @property
+    def amplification(self):
+        return self._amplification
+
+    @amplification.setter
+    def amplification(self, amplification: float):
+        assert amplification > 0
+        self._amplification = amplification
+
     def __init__(self, name: str):
         super().__init__(name)
         self._threshold = 0.3
+        self._amplification = 1
 
     def execute(self) -> np.ndarray:
-        log.info('binarize: using a threshold of %f' % self.threshold)
+        log.info('binarize: threshold=%f, amplification=%f',
+                 self.threshold, self.amplification)
+
+        a = self.amplification
         src = self.pipeline[-1].arr.astype(np.int64)
-        tgt = src[:, :, 0] - (src[:, :, 1] + src[:, :, 2])
+        tgt = (src[:, :, 0] * a) - (src[:, :, 1] + src[:, :, 2])
 
         e = 255 * self.threshold
         tgt[tgt < e] = 0
@@ -187,7 +200,7 @@ class Binarize(Module):
         return tgt
 
 
-class Morph(Module):
+class Dilate(Module):
 
     @property
     def iterations(self):
@@ -233,6 +246,19 @@ class Fill(Module):
         return tgt
 
 
+class Edger(Module):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self) -> np.ndarray:
+        log.info('edgering')
+        src = self.pipeline[-1].arr
+        tgt = np.zeros(src.shape)
+        tgt[scnd.binary_dilation(src)] = 255
+        return _norm(src.astype(np.bool) ^ tgt.astype(np.bool))
+
+
 class Hough(Module):
 
     def __init__(self, name: str):
@@ -241,16 +267,16 @@ class Hough(Module):
     def execute(self) -> np.ndarray:
         log.info('detecting lines via hough transformation')
 
-        src = self.pipeline[-1].arr
+        # src = self.pipeline[-1].arr
         tgt = self.pipeline[0].arr / 3
 
-        _, angles, dists = skt.hough_line_peaks(
-            *skt.hough_line(src),
-            min_angle=30,
-            min_distance=10)
+        # _, angles, dists = skt.hough_line_peaks(
+        #     *skt.hough_line(src),
+        #     min_angle=30,
+        #     min_distance=10)
 
-        for a, r in zip(np.rad2deg(angles), dists):
-            log.info('looking at a=%s, r=%s', str(a), str(r))
+        # for a, r in zip(np.rad2deg(angles), dists):
+        #     log.info('looking at a=%s, r=%s', str(a), str(r))
 
         # lines = skt.probabilistic_hough_line(src, threshold=0.5)
         # tgt = np.copy(self.pipeline[0].arr)
