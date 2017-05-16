@@ -4,8 +4,11 @@ import logging
 import logging.config
 
 
+logging.addLevelName(5, 'TRACE')
 logging.config.fileConfig('logging.conf')
 
 
 def logger(name):
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    logger.TRACE = logging.getLevelName('TRACE')
+    return logger

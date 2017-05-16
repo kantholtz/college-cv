@@ -233,5 +233,5 @@ class Image(qtw.QWidget):
         qp.drawRect(0, 0, dim_w-1, dim_h-1)
         qp.end()
 
-        log.debug('repainting took %sμs',
-                  (datetime.now() - t_start).microseconds)
+        log.log(log.TRACE, 'repainting took %sμs',
+                (datetime.now() - t_start).microseconds)
