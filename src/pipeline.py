@@ -5,9 +5,8 @@
 from datetime import datetime
 
 import numpy as np
-# import skimage.draw as skd
 import scipy.ndimage as scnd
-# import skimage.transform as skt
+import skimage.transform as skt
 
 from . import logger
 log = logger(__name__)
@@ -101,6 +100,15 @@ class Pipeline():
 
         return self
 
+    def _ts(self, fmt: str, t_start: datetime, *args) -> None:
+        delta = (datetime.now() - t_start).microseconds / 1000
+        log.debug(fmt, delta, *args)
+
+    def _run(self, name: str) -> None:
+        mod = self._modules[name]
+        mod.arr = mod.execute()
+        self._modules_executed.append(mod)
+
     # --- initialization
 
     def __init__(self, arr):
@@ -119,12 +127,11 @@ class Pipeline():
         self._modules_executed = [self._mod_initial]
         for name in self._module_names:
             log.debug('executing module %s', name)
-            mod = self._modules[name]
-            mod.arr = mod.execute()
-            self._modules_executed.append(mod)
+            t_current_start = datetime.now()
+            self._run(name)
+            self._ts('execution took %sms', t_current_start)
 
-        log.info('>>> finished pipeline in %sms',
-                 (datetime.now() - t_start).microseconds / 1000)
+        self._ts('finished pipeline in %sms', t_start)
 
 
 class Module():
@@ -252,36 +259,41 @@ class Edger(Module):
         super().__init__(name)
 
     def execute(self) -> np.ndarray:
-        log.info('edgering')
         src = self.pipeline[-1].arr
         tgt = np.zeros(src.shape)
         tgt[scnd.binary_dilation(src)] = 255
-        return _norm(src.astype(np.bool) ^ tgt.astype(np.bool))
+        return (src.astype(np.bool) ^ tgt.astype(np.bool)) * 255
 
 
 class Hough(Module):
+
+    @property
+    def angles(self) -> np.array:
+        return self._angles
+
+    @property
+    def dists(self) -> np.array:
+        return self._dists
 
     def __init__(self, name: str):
         super().__init__(name)
 
     def execute(self) -> np.ndarray:
         log.info('detecting lines via hough transformation')
+        src = self.pipeline[-1].arr
 
-        # src = self.pipeline[-1].arr
-        tgt = self.pipeline[0].arr / 3
+        _, a, d = skt.hough_line_peaks(
+            *skt.hough_line(src),
+            min_angle=10,
+            min_distance=100)
 
-        # _, angles, dists = skt.hough_line_peaks(
-        #     *skt.hough_line(src),
-        #     min_angle=30,
-        #     min_distance=10)
-
-        # for a, r in zip(np.rad2deg(angles), dists):
-        #     log.info('looking at a=%s, r=%s', str(a), str(r))
+        self._angles = a  # np.rad2deg(a)
+        self._dists = d
 
         # lines = skt.probabilistic_hough_line(src, threshold=0.5)
         # tgt = np.copy(self.pipeline[0].arr)
 
         # for points in [np.asarray(l)[:, ::-1] for l in lines]:
-        #     tgt[skd.line(*np.ravel(points))] = 1
+        #     tgt[skd.line(*np.ravel(points))] = 255
 
-        return tgt
+        return self.pipeline[0].arr

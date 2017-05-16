@@ -8,6 +8,7 @@ Maintains the processing pipeline and handles displaying processing steps
 
 
 import numpy as np
+import skimage.draw as skd
 import PyQt5.QtCore as qtc
 import PyQt5.QtWidgets as qtw
 
@@ -267,18 +268,48 @@ class EdgeDetection(Tab):
 
 class Hough(Tab):
 
-    def _init_gui(self):
-        self._widget = gui_image.ImageModule(self._mod_hough.arr)
+    def _init_gui(self, arr: np.ndarray):
+        self._widget = gui_image.ImageModule(arr)
 
     def __init__(self):
         super().__init__('Hough Selection')
         self._mod_hough = pl.Hough('hough')
-        for mod in [self._mod_hough]:
-            self + mod
+        self + self._mod_hough
 
     def update(self):
+        tgt = self._mod_hough.arr / 4
+        h, w, _ = tgt.shape
+
+        def _bound(val: int, bound: int) -> int:
+            if val < 0:
+                return 0
+            elif val > bound:
+                return bound
+            else:
+                return val
+
+        for a, d in zip(self._mod_hough.angles, self._mod_hough.dists):
+            # TODO division by zero for a=[01]
+
+            y0 = int(d / np.sin(a))
+            y1 = int((d - w * np.cos(a)) / np.sin(a))
+
+            x0 = int(d / np.cos(a))
+            x1 = int((d - h * np.sin(a)) / np.cos(a))
+
+            y0, y1 = [int(_bound(y, h-1)) for y in (y0, y1)]
+            x0, x1 = [int(_bound(x, w-1)) for x in (x0, x1)]
+
+            if a > 0:
+                y0, y1 = y1, y0
+
+            if (y0 >= 0 and y1 >= 0):
+                rr, cc, vv = skd.line_aa(y0, x0, y1, x1)
+                tgt[rr, cc, 0] += vv * 255
+                tgt[tgt > 255] = 255
+
         try:
-            self.widget.view.image.arr = self._mod_hough.arr
+            self.widget.view.image.arr = tgt
 
         except AttributeError:
-            self._init_gui()
+            self._init_gui(tgt)
