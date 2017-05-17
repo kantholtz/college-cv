@@ -300,6 +300,7 @@ class Hough(Tab):
             y0, y1 = [int(_bound(y, h-1)) for y in (y0, y1)]
             x0, x1 = [int(_bound(x, w-1)) for x in (x0, x1)]
 
+            # revise: see pipeline.py Hough.execute
             if a > 0:
                 y0, y1 = y1, y0
 
@@ -307,6 +308,12 @@ class Hough(Tab):
                 rr, cc, vv = skd.line_aa(y0, x0, y1, x1)
                 tgt[rr, cc, 0] += vv * 255
                 tgt[tgt > 255] = 255
+
+        # ---
+
+        for y, x in self._mod_hough.pois:
+            rr, cc = skd.circle(y, x, 5)
+            tgt[rr, cc] = [255, 255, 255]
 
         try:
             self.widget.view.image.arr = tgt

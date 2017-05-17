@@ -15,71 +15,6 @@ log = logger(__name__)
 # ---
 
 
-def _norm(arr):
-    # fmt = '%s (%s) - min: %d, max: %d'
-    # print(fmt % ('normalizing: ', arr.shape, np.min(arr), np.max(arr)))
-
-    a_min = np.min(arr)
-    if a_min < 0:
-        arr += abs(a_min)
-
-    a_max = np.max(arr)
-    if a_max == 0:
-        return arr.astype(np.uint8)
-
-    norm = (arr / a_max) * 255
-    # print(fmt % ('result: ', arr.shape, np.min(norm), np.max(norm)))
-    return norm.astype(np.uint8)
-
-
-# _sin = {a: math.sin(math.radians(a)) for a in range(180)}
-# _cos = {a: math.cos(math.radians(a)) for a in range(180)}
-
-
-# def _hess2point(h, w):
-
-#     h_bound = h - 1
-#     w_bound = w - 1
-
-#     # max_rad = int(round(math.sqrt(h**2 + w**2) + .5))
-
-#     def in_img(p):
-#         y, x = p
-#         return 0 <= y and y < h and 0 <= x and x < w
-
-#     def get(a, r):
-#         # print('get points: a=%d, r=%d' % (a, r))
-#         if a == 0:
-#             off = min(r, w_bound)
-#             return (0, off), (h_bound, off)
-
-#         if a == 90:
-#             off = min(r, h_bound)
-#             return (off, 0), (off, w_bound)
-
-#         # if a > 90:
-#         #     r = -max_rad + r
-
-#         p_lt = r / _sin[a], 0
-#         p_rt = (-w_bound * _cos[a] + r) / _sin[a], w_bound
-#         p_up = 0, r / _cos[a]
-#         p_dn = h_bound, (-h_bound * _sin[a] + r) / _cos[a]
-
-#         points = (tuple(int(round(t)) for t in p)
-#                   for p in (p_lt, p_rt, p_up, p_dn))
-
-#         # print('a=%d, r=%d, cos=%f, sin=%f' % (
-#         #     a, r, self.cos[a], sin[a]))
-
-#         # print('pre filter: %s' % str(tuple(points)))
-#         return tuple(filter(in_img, points))
-
-#     return get
-
-
-# ---
-
-
 class Pipeline():
 
     def __getitem__(self, key):
@@ -275,25 +210,74 @@ class Hough(Module):
     def dists(self) -> np.array:
         return self._dists
 
+    @property
+    def pois(self) -> (int, int):
+        return self._pois
+
     def __init__(self, name: str):
         super().__init__(name)
 
     def execute(self) -> np.ndarray:
-        log.info('detecting lines via hough transformation')
         src = self.pipeline[-1].arr
 
-        _, a, d = skt.hough_line_peaks(
+        # --- apply hough transformation
+
+        _, angles, dists = skt.hough_line_peaks(
             *skt.hough_line(src),
             min_angle=10,
             min_distance=100)
 
-        self._angles = a  # np.rad2deg(a)
-        self._dists = d
+        self._angles = angles
+        self._dists = dists
 
+        # probabilistic hough: just for fun
         # lines = skt.probabilistic_hough_line(src, threshold=0.5)
         # tgt = np.copy(self.pipeline[0].arr)
-
         # for points in [np.asarray(l)[:, ::-1] for l in lines]:
         #     tgt[skd.line(*np.ravel(points))] = 255
 
+        # --- detect points of intersection
+
+        n = len(angles)
+
+        # the returned angles span 180 degrees from -90 to 90
+        # assuming the image coordinate [0, 0] starts north west
+        # then the corresponding angles are:
+        # [-1, 0] = -90
+        # [ 0, 1] =   0
+        # [ 1, 0] =  90
+
+        # initialize normal vectors of the found lines
+        # provided by the hough transformation
+        hough_vecs = np.ndarray(shape=(2, n))
+        hough_vecs[0] = np.sin(angles)  # y coordinates
+        hough_vecs[1] = np.cos(angles)  # x coordinates
+
+        # calculate the reference points based on the distance
+        ref_points = np.ones((3, n))
+        ref_points[:, :2] = (hough_vecs * dists).T
+
+        # calculate normal vectors describing the lines' direction
+        hough_vecs_norm = np.ndarray(shape=(2, n))
+        hough_vecs_norm[0] = hough_vecs[1]
+        hough_vecs_norm[1] = -hough_vecs[0]
+
+        # calculate points on each line for creating
+        # the homogeneous coordinates
+        line_points = np.copy(ref_points)
+        line_points[:, :2] += (hough_vecs_norm * 100).T
+
+        # create homogeneous coordinates
+        h_coords = np.cross(ref_points, line_points)
+
+        pois = set()
+        for i, coord in enumerate(h_coords):
+            a_pois = np.cross(np.full((3, n), coord), h_coords)
+
+            for poi in filter(lambda p: p[2] != 0, a_pois):
+                pois.add((
+                    int(poi[0] / poi[2]),
+                    int(poi[1] / poi[2])))
+
+        self._pois = pois
         return self.pipeline[0].arr
