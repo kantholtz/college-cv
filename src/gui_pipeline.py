@@ -48,10 +48,10 @@ class PipelineGUI():
     # ---
 
     def _init_gui(self, arr):
-        module = gui_image.ImageModule(arr)
+        self._widget = gui_image.ImageModule(arr)
 
         layout = qtw.QVBoxLayout()
-        layout.addWidget(module, stretch=1)
+        layout.addWidget(self._widget, stretch=1)
 
         origin = qtw.QWidget()
         origin.setLayout(layout)
@@ -92,6 +92,11 @@ class PipelineGUI():
             for tab in self:
                 self.tab_widget.addTab(tab.widget, tab.name)
             self._initialized = True
+
+        try:
+            self._view_result.image.arr = self._tabs[-1].result
+        except AttributeError:
+            self._view_result = self._widget.add_view(self._tabs[-1].result)
 
 
 class Tab(qtw.QWidget):
@@ -268,6 +273,26 @@ class EdgeDetection(Tab):
 
 class Hough(Tab):
 
+    @property
+    def result(self):
+        return self._result
+
+    @result.setter
+    def result(self, barycenter):
+        tgt = self._mod_hough.arr / 3
+
+        for y, x, r in barycenter:
+            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+            tgt[rr, cc, 0] += vv * 255
+            tgt[rr, cc, 1] += vv * 255
+            tgt[rr, cc, 2] += vv * 255
+            tgt[tgt > 255] = 255
+
+            rr, cc = skd.circle(y, x, r, shape=tgt.shape)
+            tgt[rr, cc] *= 3
+
+        self._result = tgt
+
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
 
@@ -321,10 +346,10 @@ class Hough(Tab):
 
             rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
             tgt[rr, cc, 0] += vv * 255
-            tgt[rr, cc, 1] += vv * 255
-            tgt[rr, cc, 2] += vv * 255
 
             tgt[tgt > 255] = 255
+
+        self.result = self._mod_hough.barycenter.values()
 
         try:
             self.widget.view.image.arr = tgt
