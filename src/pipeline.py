@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 
-# import math
 from datetime import datetime
+from itertools import combinations
+from collections import defaultdict
 
 import numpy as np
 import scipy.ndimage as scnd
@@ -214,11 +215,16 @@ class Hough(Module):
     def pois(self) -> (int, int):
         return self._pois
 
+    @property
+    def barycenter(self) -> dict:
+        return self._barycenter
+
     def __init__(self, name: str):
         super().__init__(name)
 
     def execute(self) -> np.ndarray:
         src = self.pipeline[-1].arr
+        h, w = src.shape
 
         # --- apply hough transformation
 
@@ -270,14 +276,48 @@ class Hough(Module):
         # create homogeneous coordinates
         h_coords = np.cross(ref_points, line_points)
 
-        pois = set()
+        intersections = defaultdict(set)
+        ipoints = defaultdict(dict)
+        self._pois = set()
+
+        # calculate points of intersections and map every
+        # line to a set of other lines that it subtends
         for i, coord in enumerate(h_coords):
-            a_pois = np.cross(np.full((3, n), coord), h_coords)
+            current = np.full((3, n), coord)
 
-            for poi in filter(lambda p: p[2] != 0, a_pois):
-                pois.add((
-                    int(poi[0] / poi[2]),
-                    int(poi[1] / poi[2])))
+            for j, poi in enumerate(np.cross(current, h_coords)):
+                if poi[2] == 0:
+                    continue
 
-        self._pois = pois
+                poi[0] /= poi[2]
+                poi[1] /= poi[2]
+
+                if (min(poi[0], poi[1]) < 0 or poi[0] >= h or poi[1] >= w):
+                    continue
+
+                coords = tuple(map(int, poi[:2]))
+                ipoints[i][j] = coords
+                self._pois.add(coords)
+                intersections[i].add(j)
+
+        # choose all triangles by exploring whether intersection is transitive:
+        # intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
+        # if this implication holds: calculate the barycenter
+        triangles = {}
+        for c0 in intersections:
+            for c1, c2 in combinations(intersections[c0], 2):
+                if c2 not in intersections[c1]:
+                    continue
+
+                key = tuple(sorted((c0, c1, c2)))
+                if key not in triangles:
+
+                    p0, p1, p2 = (ipoints[c0][c1],
+                                  ipoints[c0][c2],
+                                  ipoints[c1][c2])
+
+                    center = tuple([np.sum(z) // 3 for z in zip(p0, p1, p2)])
+                    triangles[key] = center
+
+        self._barycenter = triangles
         return self.pipeline[0].arr

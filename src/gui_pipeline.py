@@ -312,6 +312,11 @@ class Hough(Tab):
         # ---
 
         for y, x in self._mod_hough.pois:
+            rr, cc = skd.circle(y, x, 3)
+            tgt[rr, cc] = [255, 255, 255]
+
+        for y, x in self._mod_hough.barycenter.values():
+            print(y, x)
             rr, cc = skd.circle(y, x, 5)
             tgt[rr, cc] = [255, 255, 255]
 
