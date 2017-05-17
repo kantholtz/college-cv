@@ -315,10 +315,16 @@ class Hough(Tab):
             rr, cc = skd.circle(y, x, 3)
             tgt[rr, cc] = [255, 255, 255]
 
-        for y, x in self._mod_hough.barycenter.values():
-            print(y, x)
-            rr, cc = skd.circle(y, x, 5)
+        for y, x, r in self._mod_hough.barycenter.values():
+            rr, cc = skd.circle(y, x, 3)
             tgt[rr, cc] = [255, 255, 255]
+
+            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+            tgt[rr, cc, 0] += vv * 255
+            tgt[rr, cc, 1] += vv * 255
+            tgt[rr, cc, 2] += vv * 255
+
+            tgt[tgt > 255] = 255
 
         try:
             self.widget.view.image.arr = tgt

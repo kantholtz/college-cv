@@ -281,7 +281,7 @@ class Hough(Module):
         self._pois = set()
 
         # calculate points of intersections and map every
-        # line to a set of other lines that it subtends
+        # line to a set of other lines that it cuts
         for i, coord in enumerate(h_coords):
             current = np.full((3, n), coord)
 
@@ -316,8 +316,16 @@ class Hough(Module):
                                   ipoints[c0][c2],
                                   ipoints[c1][c2])
 
-                    center = tuple([np.sum(z) // 3 for z in zip(p0, p1, p2)])
-                    triangles[key] = center
+                    center = np.array([np.sum(z) // 3 for z
+                                       in zip(p0, p1, p2)])
+
+                    r = 0
+                    for p in (p0, p1, p2):
+                        d = np.linalg.norm(center - np.array(p))
+                        if d > r:
+                            r = int(d * 2)
+
+                    triangles[key] = tuple(center) + (r, )
 
         self._barycenter = triangles
         return self.pipeline[0].arr
