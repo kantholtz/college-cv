@@ -203,6 +203,10 @@ class Edger(Module):
 class Hough(Module):
 
     @property
+    def src(self) -> np.ndarray:
+        return self._src
+
+    @property
     def angles(self) -> np.array:
         return self._angles
 
@@ -211,24 +215,118 @@ class Hough(Module):
         return self._dists
 
     @property
-    def pois(self) -> (int, int):
+    def pois(self) -> dict:
         return self._pois
 
     @property
     def barycenter(self) -> dict:
         return self._barycenter
 
+    def _calc_intersections(self, h_coords: np.ndarray):
+        """
+        Calculate points of intersections and map every
+        line to a set of other lines that it cuts.
+
+        This method returns two dictionaries (intersections, ipoints)
+
+          - intersections maps line index to line index
+              (int -> int)
+          - ipoints maps each cut to their point of intersection
+              (int -> int -> tuple(3))
+
+        """
+        n, _ = h_coords.shape
+        h, w = self.src.shape
+
+        # Take each homogeneous vector and calculate possible
+        # intersections with all other vectors
+        for i, coord in enumerate(h_coords):
+            current = np.full((n, 3), coord)
+
+            for j, poi in enumerate(np.cross(current, h_coords)):
+                if poi[2] == 0:
+                    continue
+
+                poi[0] /= poi[2]
+                poi[1] /= poi[2]
+
+                # adjust boundaries for truncated triangles here
+                if (min(poi[0], poi[1]) < 0 or poi[0] >= h or poi[1] >= w):
+                    continue
+
+                coords = tuple(map(int, poi[:2]))
+                a, b = min(i, j), max(i, j)
+                self._pois[a][b] = coords
+
+    def _calc_triangles(self):
+        """
+        Choose all triangles by exploring whether intersection is transitive:
+          - intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
+        If this implication holds: calculate the barycenter.
+
+        The resulting triangles are again filtered to only contain those
+        which are likely to resemble a yield sign.
+
+        """
+        points = self.pois
+
+        triangles = {}
+        for c0 in points:
+            for c1, c2 in combinations(points[c0].keys(), 2):
+                key = tuple(sorted((c0, c1, c2)))
+                if key not in triangles:
+
+                    p0, p1, p2 = (points[c0][c1],
+                                  points[c0][c2],
+                                  points[c1][c2])
+
+                    center = np.array([np.sum(z) // 3 for z
+                                       in zip(p0, p1, p2)])
+
+                    r = 0
+                    for p in (p0, p1, p2):
+                        d = np.linalg.norm(center - np.array(p))
+                        if d > r:
+                            r = int(d * 1.3)
+
+                    triangles[key] = tuple(center) + (r, )
+
+            self._barycenter = self._filter_triangles(triangles)
+
+    def _filter_triangles(self, triangles):
+        """
+        Filter triangles by their appearance. A yield sign is an upside
+        down triangle and we assume they are not too skewed by
+        perspective as road signs are usually turned towards the
+        driver.
+
+        """
+        points = self.pois
+        for (l1, l2, l3), barycenter in triangles.items():
+            p1, p2, p3 = points[l1][l2], points[l1][l3], points[l2][l3]
+
+            log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
+                     l1, l2, l3, p1, p2, p3)
+
+        return triangles
+
     def __init__(self, name: str):
         super().__init__(name)
 
+        # points of intersections
+        self._pois = defaultdict(dict)
+
+        # triangles, mapped by tuple -> tuple
+        self._barycenter = None
+
     def execute(self) -> np.ndarray:
-        src = self.pipeline[-1].arr
-        h, w = src.shape
+        self._src = self.pipeline[-1].arr
+        h, w = self._src.shape
 
         # --- apply hough transformation
 
         _, angles, dists = skt.hough_line_peaks(
-            *skt.hough_line(src),
+            *skt.hough_line(self.src),
             min_angle=10,
             min_distance=100)
 
@@ -275,57 +373,11 @@ class Hough(Module):
         line_points = np.vstack((line_points, np.ones(n)))
         h_coords = np.cross(ref_points.T, line_points.T)
 
-        intersections = defaultdict(set)
-        ipoints = defaultdict(dict)
-        self._pois = set()
+        # populate self.pois
+        self._calc_intersections(h_coords)
 
-        # calculate points of intersections and map every
-        # line to a set of other lines that it cuts
-        for i, coord in enumerate(h_coords):
-            # was (3, n)
-            current = np.full((n, 3), coord)
+        # populate self.barycenter by calculating
+        # and filtering triangles
+        self._calc_triangles()
 
-            for j, poi in enumerate(np.cross(current, h_coords)):
-                if poi[2] == 0:
-                    continue
-
-                poi[0] /= poi[2]
-                poi[1] /= poi[2]
-
-                if (min(poi[0], poi[1]) < 0 or poi[0] >= h or poi[1] >= w):
-                    continue
-
-                coords = tuple(map(int, poi[:2]))
-                ipoints[i][j] = coords
-                self._pois.add(coords)
-                intersections[i].add(j)
-
-        # choose all triangles by exploring whether intersection is transitive:
-        # intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
-        # if this implication holds: calculate the barycenter
-        triangles = {}
-        for c0 in intersections:
-            for c1, c2 in combinations(intersections[c0], 2):
-                if c2 not in intersections[c1]:
-                    continue
-
-                key = tuple(sorted((c0, c1, c2)))
-                if key not in triangles:
-
-                    p0, p1, p2 = (ipoints[c0][c1],
-                                  ipoints[c0][c2],
-                                  ipoints[c1][c2])
-
-                    center = np.array([np.sum(z) // 3 for z
-                                       in zip(p0, p1, p2)])
-
-                    r = 0
-                    for p in (p0, p1, p2):
-                        d = np.linalg.norm(center - np.array(p))
-                        if d > r:
-                            r = int(d * 2)
-
-                    triangles[key] = tuple(center) + (r, )
-
-        self._barycenter = triangles
         return self.pipeline[0].arr

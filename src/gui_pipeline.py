@@ -278,6 +278,14 @@ class Hough(Tab):
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
 
+    def _unpack(self, dic):
+        """
+        Takes a mapping int -> int -> X and returns [X]
+
+        """
+        vals = [d.values() for d in dic.values()]
+        return [a for b in vals for a in b]
+
     def __init__(self):
         super().__init__('Hough Selection')
         self._mod_hough = pl.Hough('hough')
@@ -307,7 +315,7 @@ class Hough(Tab):
             y0, y1 = [int(_bound(y, h-1)) for y in (y0, y1)]
             x0, x1 = [int(_bound(x, w-1)) for x in (x0, x1)]
 
-            # revise: see pipeline.py Hough.execute
+            # TODO: revise; see pipeline.py Hough.execute
             if a > 0:
                 y0, y1 = y1, y0
 
@@ -317,14 +325,13 @@ class Hough(Tab):
                 tgt[tgt > 255] = 255
 
         # ---
-
-        for y, x in self._mod_hough.pois:
+        for y, x in self._unpack(self._mod_hough.pois):
             rr, cc = skd.circle(y, x, 3)
             tgt[rr, cc] = [255, 255, 255]
 
         for y, x, r in self._mod_hough.barycenter.values():
             rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [255, 255, 255]
+            tgt[rr, cc] = [0, 125, 255]
 
             rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
             tgt[rr, cc, 0] += vv * 255
