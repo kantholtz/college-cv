@@ -126,7 +126,7 @@ class Binarize(Module):
     def __init__(self, name: str):
         super().__init__(name)
         self._threshold = 0.3
-        self._amplification = 1
+        self._amplification = 1.5
 
     def execute(self) -> np.ndarray:
         log.info('binarize: threshold=%f, amplification=%f',
@@ -151,8 +151,7 @@ class Dilate(Module):
 
     @iterations.setter
     def iterations(self, iterations: int):
-        assert type(iterations) is int
-        self._iterations = iterations
+        self._iterations = int(iterations)
 
     def __init__(self, name: str):
         super().__init__(name)
@@ -260,8 +259,7 @@ class Hough(Module):
         hough_vecs[1] = np.cos(angles)  # x coordinates
 
         # calculate the reference points based on the distance
-        ref_points = np.ones((3, n))
-        ref_points[:, :2] = (hough_vecs * dists).T
+        ref_points = hough_vecs * dists
 
         # calculate normal vectors describing the lines' direction
         hough_vecs_norm = np.ndarray(shape=(2, n))
@@ -270,11 +268,12 @@ class Hough(Module):
 
         # calculate points on each line for creating
         # the homogeneous coordinates
-        line_points = np.copy(ref_points)
-        line_points[:, :2] += (hough_vecs_norm * 100).T
+        line_points = ref_points + (hough_vecs_norm * 100)
 
         # create homogeneous coordinates
-        h_coords = np.cross(ref_points, line_points)
+        ref_points = np.vstack((ref_points, np.ones(n)))
+        line_points = np.vstack((line_points, np.ones(n)))
+        h_coords = np.cross(ref_points.T, line_points.T)
 
         intersections = defaultdict(set)
         ipoints = defaultdict(dict)
@@ -283,7 +282,8 @@ class Hough(Module):
         # calculate points of intersections and map every
         # line to a set of other lines that it cuts
         for i, coord in enumerate(h_coords):
-            current = np.full((3, n), coord)
+            # was (3, n)
+            current = np.full((n, 3), coord)
 
             for j, poi in enumerate(np.cross(current, h_coords)):
                 if poi[2] == 0:

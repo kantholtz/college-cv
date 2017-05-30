@@ -101,6 +101,38 @@ class PipelineGUI():
 
 class Tab(qtw.QWidget):
 
+    def _add_slider(self,
+                    parent: qtw.QLayout,
+                    callback,
+                    smin: int,
+                    smax: int,
+                    sfac: float = 1.0,
+                    initial: float = None,
+                    label: str = None):
+        """
+        Creates a proxy callback function to recalculate the sliders value
+        based on the provided factor
+
+        """
+        if label is not None:
+            parent.addWidget(qtw.QLabel(label))
+
+        slider = qtw.QSlider(qtc.Qt.Horizontal, self)
+        slider.setFocusPolicy(qtc.Qt.NoFocus)
+
+        slider.setMinimum(smin)
+        slider.setMaximum(smax)
+
+        if initial is not None:
+            val = initial * sfac
+            slider.setValue(val)
+
+        def proxy():
+            callback(slider.value() / sfac)
+
+        slider.sliderReleased.connect(proxy)
+        parent.addWidget(slider)
+
     @property
     def name(self) -> str:
         return self._name
@@ -144,88 +176,36 @@ class Tab(qtw.QWidget):
 
 class Preprocessing(Tab):
 
-    BIN_SLIDER_MIN = 1
-    BIN_SLIDER_MAX = 100
-    BIN_SLIDER_FAC = 100
-
-    AMP_SLIDER_MIN = 1
-    AMP_SLIDER_MAX = 10
-    AMP_SLIDER_FAC = 5
-
-    DILATE_SLIDER_MIN = 1
-    DILATE_SLIDER_MAX = 10
-
-    def _update_bin_threshold(self):
-        val = self._slider_bin.value() / Preprocessing.BIN_SLIDER_FAC
-        self._mod_binarize.threshold = val
-        self.ping()
-
-    def _update_bin_amp(self):
-        val = self._slider_amp.value() / Preprocessing.AMP_SLIDER_FAC
-        self._mod_binarize.amplification = val
-        self.ping()
-
-    def _update_dilate_iterations(self):
-        val = self._slider_dilate.value()
-        self._mod_dilate.iterations = val
-        self.ping()
-
     def _init_gui(self):
         self._widget = gui_image.ImageModule(self._mod_binarize.arr)
         self._view_dilate = self.widget.add_view(
             self._mod_dilate.arr, stats_right=True)
+
+        def proxy(mod, prop):
+            def _callback(val):
+                mod.__setattr__(prop, val)
+                self.ping()
+            return _callback
 
         # ---
 
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
-        # ---
+        init = self._mod_binarize.amplification
+        fn = proxy(self._mod_binarize, 'amplification')
+        self._add_slider(layout, fn, 1, 10, 5,
+                         initial=init, label='Red amplification')
 
-        layout.addWidget(qtw.QLabel('Red amplification'))
-        slider = self._slider_amp = qtw.QSlider(qtc.Qt.Horizontal, self)
-        slider.setFocusPolicy(qtc.Qt.NoFocus)
+        init = self._mod_binarize.threshold
+        fn = proxy(self._mod_binarize, 'threshold')
+        self._add_slider(layout, fn, 1, 100, 100,
+                         initial=init, label='Binarization δ')
 
-        slider.setMinimum(Preprocessing.AMP_SLIDER_MIN)
-        slider.setMaximum(Preprocessing.AMP_SLIDER_MAX)
-
-        val = self._mod_binarize.amplification * Preprocessing.AMP_SLIDER_FAC
-        slider.setValue(val)
-
-        slider.sliderReleased.connect(self._update_bin_amp)
-        layout.addWidget(slider)
-
-        # ---
-
-        layout.addWidget(qtw.QLabel('Binarization threshold'))
-        slider = self._slider_bin = qtw.QSlider(qtc.Qt.Horizontal, self)
-        slider.setFocusPolicy(qtc.Qt.NoFocus)
-
-        slider.setMinimum(Preprocessing.BIN_SLIDER_MIN)
-        slider.setMaximum(Preprocessing.BIN_SLIDER_MAX)
-
-        val = self._mod_binarize.threshold * Preprocessing.BIN_SLIDER_FAC
-        slider.setValue(val)
-
-        slider.sliderReleased.connect(self._update_bin_threshold)
-        layout.addWidget(slider)
-
-        # ---
-
-        layout.addWidget(qtw.QLabel('Dilation iterations'))
-        slider = self._slider_dilate = qtw.QSlider(qtc.Qt.Horizontal, self)
-        slider.setFocusPolicy(qtc.Qt.NoFocus)
-
-        slider.setMinimum(Preprocessing.DILATE_SLIDER_MIN)
-        slider.setMaximum(Preprocessing.DILATE_SLIDER_MAX)
-
-        val = self._mod_dilate.iterations
-        slider.setValue(val)
-
-        slider.sliderReleased.connect(self._update_dilate_iterations)
-        layout.addWidget(slider)
-
-        # ---
+        init = self._mod_dilate.iterations
+        fn = proxy(self._mod_dilate, 'iterations')
+        self._add_slider(layout, fn, 1, 10,
+                         initial=init, label='Dilation iterations')
 
         controls.addLayout(layout)
 
@@ -250,22 +230,24 @@ class Preprocessing(Tab):
 class EdgeDetection(Tab):
 
     def _init_gui(self):
-        self._widget = gui_image.ImageModule(self._mod_fill.arr)
-        self._view_edger = self.widget.add_view(
-            self._mod_edger.arr, stats_right=True)
+        self._widget = gui_image.ImageModule(self._mod_edger.arr)
+        # self._widget = gui_image.ImageModule(self._mod_fill.arr)
+        # self._view_edger = self.widget.add_view(
+        #     self._mod_edger.arr, stats_right=True)
 
     def __init__(self):
         super().__init__('Edge Exposure')
-        self._mod_fill = pl.Fill('fill')
+        # self._mod_fill = pl.Fill('fill')
         self._mod_edger = pl.Edger('edger')
 
-        self + self._mod_fill
+        # self + self._mod_fill
         self + self._mod_edger
 
     def update(self):
         try:
-            self.widget.view.image.arr = self._mod_fill.arr
-            self._view_edger.image.arr = self._mod_edger.arr
+            self.widget.view.image.arr = self._mod_edger.arr
+            # self.widget.view.image.arr = self._mod_fill.arr
+            # self._view_edger.image.arr = self._mod_edger.arr
 
         except AttributeError:
             self._init_gui()
@@ -349,9 +331,10 @@ class Hough(Tab):
 
             tgt[tgt > 255] = 255
 
-        self.result = self._mod_hough.barycenter.values()
+        # self.result = self._mod_hough.barycenter.values()
 
         try:
+            self._result = tgt
             self.widget.view.image.arr = tgt
 
         except AttributeError:
