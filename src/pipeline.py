@@ -6,6 +6,7 @@ from itertools import combinations
 from collections import defaultdict
 
 import numpy as np
+import skimage.draw as skd
 import scipy.ndimage as scnd
 import skimage.transform as skt
 
@@ -319,16 +320,56 @@ class Hough(Module):
 
         """
         pois = self.pois
-        for (l1, l2, l3), barycenter in triangles.items():
+        filtered = {}
+
+        for key, barycenter in triangles.items():
+            l1, l2, l3 = key
             points = pois[l1][l2], pois[l1][l3], pois[l2][l3]
+            ycoords, xcoords = zip(*points)
 
-            # log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
-            #          l1, l2, l3, *points)
+            # take the quadratic area spanned by the triangle
+            y0, y1 = np.min(ycoords), np.max(ycoords)
+            x0, x1 = np.min(xcoords), np.max(xcoords)
 
-            # print(list(zip(*points)))
-            # print(np.argmin(list(zip(*points))[1]))
+            h, w = y1 - y0, x1 - x0
+            img_h, img_w = self._src.shape
 
-        return triangles
+            # abort if too small
+            if img_h/2 < h or h < 20 or img_w/2 < w or w < 20:
+                continue
+
+            # abort if the proportions do not fit
+            ratio = min(h, w) / max(h, w)
+            if ratio < .5:
+                continue
+
+            # apply some pattern matching
+            if self._patmatch((h, w), (y0, y1, x0, x1), (ycoords, xcoords)):
+                filtered[key] = barycenter
+
+        return filtered
+
+    def _patmatch(self, dim, frame, coords):
+        ref = np.zeros(dim, dtype=np.bool)
+        tri = np.zeros(dim, dtype=np.bool)
+
+        h, w = dim
+        y0, y1, x0, x1 = frame
+        ycoords, xcoords = coords
+
+        # the reference triangle is an equilateral triangle
+        # pointing downwards
+        rr, cc = skd.polygon([-1, -1, h], [-1, w, w/2])
+        ref[rr, cc] = 1
+
+        # now apply the found triangle
+        rr, cc = skd.polygon(
+            ycoords - np.min(ycoords),
+            xcoords - np.min(xcoords))
+        tri[rr, cc] = 1
+
+        # everybody walk the pattern match
+        return np.sum(ref - tri) / ref.size < .1  # 90%
 
     def __init__(self, name: str):
         super().__init__(name)

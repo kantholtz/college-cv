@@ -338,10 +338,10 @@ class Hough(Tab):
 
             tgt[tgt > 255] = 255
 
-        # self.result = self._mod_hough.barycenter.values()
+        self.result = self._mod_hough.barycenter.values()
 
         try:
-            self._result = tgt
+            # self._result = tgt
             self.widget.view.image.arr = tgt
 
         except AttributeError:
