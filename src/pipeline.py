@@ -273,21 +273,32 @@ class Hough(Module):
 
         for c0 in points:
             for c1, c2 in combinations(points[c0].keys(), 2):
+
+                # it is very imported to use them sorted
+                # as the point datastructure uses the same order
                 key = tuple(sorted((c0, c1, c2)))
-                if key not in triangles:
 
-                    try:
-                        p0, p1, p2 = (points[c0][c1],
-                                      points[c0][c2],
-                                      points[c1][c2])
+                # the order of theses tests are important as the
+                # lookup for d[i] in a defaultdict creates the default
+                # object
+                if key not in triangles and (
+                        c1 in points.keys() and
+                        c1 in points[c0].keys() and
+                        c2 in points[c0].keys() and
+                        c2 in points[c1].keys()):
 
-                    except KeyError:
-                        # TODO check whether this is the correct behaviour
-                        continue
+                    p0, p1, p2 = (points[c0][c1],
+                                  points[c0][c2],
+                                  points[c1][c2])
 
+                    # calculate the (bary)center by taking the
+                    # sum of all vertices and divide them by
+                    # their amount (always 3 in this case)
                     center = np.array([np.sum(z) // 3 for z
                                        in zip(p0, p1, p2)])
 
+                    # TODO may be removed
+                    # calculate an estimation for the radius
                     r = 0
                     for p in (p0, p1, p2):
                         d = np.linalg.norm(center - np.array(p))
@@ -306,9 +317,9 @@ class Hough(Module):
         driver.
 
         """
-        points = self.pois
+        pois = self.pois
         for (l1, l2, l3), barycenter in triangles.items():
-            points = points[l1][l2], points[l1][l3], points[l2][l3]
+            points = pois[l1][l2], pois[l1][l3], pois[l2][l3]
 
             log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
                      l1, l2, l3, *points)
