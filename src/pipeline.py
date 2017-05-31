@@ -9,6 +9,7 @@ import numpy as np
 import scipy.ndimage as scnd
 import skimage.transform as skt
 
+from . import tmeasure
 from . import logger
 log = logger(__name__)
 
@@ -57,17 +58,17 @@ class Pipeline():
         self._mod_initial.arr = arr
 
     def run(self):
-        t_start = datetime.now()
+        executed = tmeasure(log, 'finished pipeline in %sms')
         log.info('>>> running pipeline')
 
         self._modules_executed = [self._mod_initial]
         for name in self._module_names:
             log.debug('executing module %s', name)
-            t_current_start = datetime.now()
+            ran = tmeasure(log, 'execution took %sms')
             self._run(name)
-            self._ts('execution took %sms', t_current_start)
+            ran()
 
-        self._ts('finished pipeline in %sms', t_start)
+        executed()
 
 
 class Module():
@@ -321,11 +322,11 @@ class Hough(Module):
         for (l1, l2, l3), barycenter in triangles.items():
             points = pois[l1][l2], pois[l1][l3], pois[l2][l3]
 
-            log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
-                     l1, l2, l3, *points)
+            # log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
+            #          l1, l2, l3, *points)
 
-            print(list(zip(*points)))
-            print(np.argmin(list(zip(*points))[1]))
+            # print(list(zip(*points)))
+            # print(np.argmin(list(zip(*points))[1]))
 
         return triangles
 
@@ -344,10 +345,12 @@ class Hough(Module):
 
         # --- apply hough transformation
 
+        done = tmeasure(log, '  skt hough: %sms')
         _, angles, dists = skt.hough_line_peaks(
             *skt.hough_line(self.src),
             min_angle=10,
             min_distance=100)
+        done()
 
         self._angles = angles
         self._dists = dists
