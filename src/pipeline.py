@@ -269,16 +269,21 @@ class Hough(Module):
 
         """
         points = self.pois
-
         triangles = {}
+
         for c0 in points:
             for c1, c2 in combinations(points[c0].keys(), 2):
                 key = tuple(sorted((c0, c1, c2)))
                 if key not in triangles:
 
-                    p0, p1, p2 = (points[c0][c1],
-                                  points[c0][c2],
-                                  points[c1][c2])
+                    try:
+                        p0, p1, p2 = (points[c0][c1],
+                                      points[c0][c2],
+                                      points[c1][c2])
+
+                    except KeyError:
+                        # TODO check whether this is the correct behaviour
+                        continue
 
                     center = np.array([np.sum(z) // 3 for z
                                        in zip(p0, p1, p2)])
@@ -291,7 +296,7 @@ class Hough(Module):
 
                     triangles[key] = tuple(center) + (r, )
 
-            self._barycenter = self._filter_triangles(triangles)
+        self._barycenter = self._filter_triangles(triangles)
 
     def _filter_triangles(self, triangles):
         """
@@ -303,10 +308,13 @@ class Hough(Module):
         """
         points = self.pois
         for (l1, l2, l3), barycenter in triangles.items():
-            p1, p2, p3 = points[l1][l2], points[l1][l3], points[l2][l3]
+            points = points[l1][l2], points[l1][l3], points[l2][l3]
 
             log.info('triangle (%d, %d, %d) with pois p1=(%s) p2=(%s) p3=(%s)',
-                     l1, l2, l3, p1, p2, p3)
+                     l1, l2, l3, *points)
+
+            print(list(zip(*points)))
+            print(np.argmin(list(zip(*points))[1]))
 
         return triangles
 
