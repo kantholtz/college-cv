@@ -220,13 +220,11 @@ class Preprocessing(Tab):
         self._add_slider(layout, fn, 1, 100, 100,
                          initial=init, label='Binarization δ')
 
-        self._mod_erode.iterations = 0
         init = self._mod_erode.iterations
         fn = self._mod_proxy(self._mod_erode, 'iterations')
         self._add_slider(layout, fn, 0, 10,
                          initial=init, label='Erosion iterations')
 
-        self._mod_dilate.iterations = 0
         init = self._mod_dilate.iterations
         fn = self._mod_proxy(self._mod_dilate, 'iterations')
         self._add_slider(layout, fn, 0, 10,
@@ -240,6 +238,9 @@ class Preprocessing(Tab):
         self._mod_binarize = pl.Binarize('binarize')
         self._mod_erode = pl.Erode('erode')
         self._mod_dilate = pl.Dilate('dilate')
+
+        self._mod_erode.iterations = 0
+        self._mod_dilate.iterations = 0
 
         self + self._mod_binarize
         self + self._mod_erode
@@ -288,40 +289,11 @@ class Hough(Tab):
         return self._result
 
     @result.setter
-    def result(self, barycenter):
-        tgt = self._mod_hough.arr / 3
-        h, w, _ = tgt.shape
+    def result(self, result):
+        self._result = result
 
-        self._draw_lines(tgt, self._mod_hough.angles, self._mod_hough.dists)
-
-        # ---
-
-        for y, x in self._unpack(self._mod_hough.pois):
-            rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [255, 255, 255]
-
-        for y, x, r in self._mod_hough.barycenter.values():
-            rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [0, 125, 255]
-
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-
-            tgt[tgt > 255] = 255
-
-        for y, x, r in barycenter:
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-            tgt[rr, cc, 1] += vv * 255
-            tgt[rr, cc, 2] += vv * 255
-            tgt[tgt > 255] = 255
-
-            rr, cc = skd.circle(y, x, r, shape=tgt.shape)
-            tgt[rr, cc] *= 3
-
-        self._result = tgt
-
-    def _draw_lines(self, tgt, angles, dists):
+    def _draw_lines(self, tgt):
+        mod = self._mod_hough
         h, w, _ = tgt.shape
 
         def _bound(val: int, bound: int) -> int:
@@ -332,7 +304,7 @@ class Hough(Tab):
             else:
                 return val
 
-        for a, d in zip(angles, dists):
+        for a, d in zip(mod.angles, mod.dists):
             # TODO division by zero for a=[01]
 
             y0 = int(d / np.sin(a))
@@ -352,6 +324,48 @@ class Hough(Tab):
                 rr, cc, vv = skd.line_aa(y0, x0, y1, x1)
                 tgt[rr, cc, 0] += vv * 255
                 tgt[tgt > 255] = 255
+
+    def _draw_points(self, tgt):
+        mod = self._mod_hough
+
+        # points of intersection
+        for y, x in self._unpack(mod.pois):
+            rr, cc = skd.circle(y, x, 2)
+            tgt[rr, cc] = [255, 255, 255]
+
+        # barycenters
+        for y, x, r in mod.barycenter.values():
+            rr, cc = skd.circle(y, x, 3)
+            tgt[rr, cc] = [0, 125, 255]
+
+            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+            tgt[rr, cc, 0] += vv * 255
+
+            tgt[tgt > 255] = 255
+
+    def _draw_target(self):
+        tgt = self._mod_hough.arr / 3
+        self._draw_lines(tgt)
+        self._draw_points(tgt)
+        return tgt
+
+    def _draw_result(self):
+        mod = self._mod_hough
+        tgt = mod.arr / 3
+        h, w, _ = tgt.shape
+
+        barycenter = mod.barycenter.values()
+        for y, x, r in barycenter:
+            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+            tgt[rr, cc, 0] += vv * 255
+            tgt[rr, cc, 1] += vv * 255
+            tgt[rr, cc, 2] += vv * 255
+            tgt[tgt > 255] = 255
+
+            rr, cc = skd.circle(y, x, r, shape=tgt.shape)
+            tgt[rr, cc] *= 3
+
+        return tgt
 
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
@@ -387,10 +401,11 @@ class Hough(Tab):
         self + self._mod_hough
 
     def update(self):
-        self.result = self._mod_hough.barycenter.values()
+        tgt = self._draw_target()
+        self.result = self._draw_result()
 
         try:
-            self.widget.view.image.arr = self.result
+            self.widget.view.image.arr = tgt
 
         except AttributeError:
-            self._init_gui(self.result)
+            self._init_gui(tgt)
