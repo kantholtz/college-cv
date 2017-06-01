@@ -59,13 +59,13 @@ class Pipeline():
         self._mod_initial.arr = arr
 
     def run(self):
-        executed = tmeasure(log, 'finished pipeline in %sms')
+        executed = tmeasure(log.info, 'finished pipeline in %sms')
         log.info('>>> running pipeline')
 
         self._modules_executed = [self._mod_initial]
         for name in self._module_names:
             log.debug('executing module %s', name)
-            ran = tmeasure(log, 'execution took %sms')
+            ran = tmeasure(log.debug, 'execution took %sms')
             self._run(name)
             ran()
 
@@ -309,7 +309,13 @@ class Hough(Module):
 
                     triangles[key] = tuple(center) + (r, )
 
+        # finally, filter found triangles
+        log.info('found %d triangles', len(triangles))
+        done = tmeasure(log.debug,
+                        'filtering took %sms and %d triangles remain')
+
         self._barycenter = self._filter_triangles(triangles)
+        done(len(self.barycenter))
 
     def _filter_triangles(self, triangles):
         """
@@ -322,10 +328,19 @@ class Hough(Module):
         pois = self.pois
         filtered = {}
 
-        for key, barycenter in triangles.items():
+        def timing(gen):
+            for it in gen:
+                done = tmeasure(log.debug, ' it took %sms')
+                yield it
+                done()
+
+        for key, barycenter in timing(triangles.items()):
+
             l1, l2, l3 = key
             points = pois[l1][l2], pois[l1][l3], pois[l2][l3]
             ycoords, xcoords = zip(*points)
+
+            log.debug('looking at %s with %s', key, points)
 
             # take the quadratic area spanned by the triangle
             y0, y1 = np.min(ycoords), np.max(ycoords)
@@ -334,18 +349,24 @@ class Hough(Module):
             h, w = y1 - y0, x1 - x0
             img_h, img_w = self._src.shape
 
-            # abort if too small
+            # abort if the sign size does not fit
             if img_h/2 < h or h < 20 or img_w/2 < w or w < 20:
+                log.debug('discarding %s %dx%d sized triangle', key, h, w)
                 continue
 
             # abort if the proportions do not fit
             ratio = min(h, w) / max(h, w)
             if ratio < .5:
+                log.debug('discarding %s with ratio %f', key, ratio)
                 continue
 
             # apply some pattern matching
-            if self._patmatch((h, w), (y0, y1, x0, x1), (ycoords, xcoords)):
-                filtered[key] = barycenter
+            frame = y0, y1, x0, x1
+            if not self._patmatch((h, w), frame, (ycoords, xcoords)):
+                log.debug('discarding %s because patterns do not match', key)
+                continue
+
+            filtered[key] = barycenter
 
         return filtered
 
@@ -356,6 +377,8 @@ class Hough(Module):
         h, w = dim
         y0, y1, x0, x1 = frame
         ycoords, xcoords = coords
+
+        done = tmeasure(log.debug, 'drawing polygons took %sms')
 
         # the reference triangle is an equilateral triangle
         # pointing downwards
@@ -368,8 +391,10 @@ class Hough(Module):
             xcoords - np.min(xcoords))
         tri[rr, cc] = 1
 
+        done()
+
         # everybody walk the pattern match
-        return np.sum(ref - tri) / ref.size < .1  # 90%
+        return np.sum(ref - tri) / ref.size < .2  # 90%
 
     def __init__(self, name: str):
         super().__init__(name)
@@ -386,7 +411,7 @@ class Hough(Module):
 
         # --- apply hough transformation
 
-        done = tmeasure(log, '  skt hough: %sms')
+        done = tmeasure(log.debug, '  skt hough: %sms')
         _, angles, dists = skt.hough_line_peaks(
             *skt.hough_line(self.src),
             min_angle=10,
