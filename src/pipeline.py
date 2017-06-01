@@ -309,18 +309,9 @@ class Hough(Module):
                 a, b = min(i, j), max(i, j)
                 self._pois[a][b] = coords
 
-    def _calc_triangles(self):
-        """
-        Choose all triangles by exploring whether intersection is transitive:
-          - intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
-        If this implication holds: calculate the barycenter.
-
-        The resulting triangles are again filtered to only contain those
-        which are likely to resemble a yield sign.
-
-        """
+    def _iter_triangles(self):
+        triangles = set()
         points = self.pois
-        triangles = {}
 
         for c0 in points:
             for c1, c2 in combinations(points[c0].keys(), 2):
@@ -329,9 +320,8 @@ class Hough(Module):
                 # as the point datastructure uses the same order
                 key = tuple(sorted((c0, c1, c2)))
 
-                # the order of theses tests are important as the
-                # lookup for d[i] in a defaultdict creates the default
-                # object
+                # the order of theses tests are important as the lookup for
+                # d[i] in a defaultdict creates the default object
                 if key not in triangles and (
                         c1 in points.keys() and
                         c1 in points[c0].keys() and
@@ -342,21 +332,38 @@ class Hough(Module):
                                   points[c0][c2],
                                   points[c1][c2])
 
-                    # calculate the (bary)center by taking the
-                    # sum of all vertices and divide them by
-                    # their amount (always 3 in this case)
-                    center = np.array([np.sum(z) // 3 for z
-                                       in zip(p0, p1, p2)])
+                    triangles.add(key)
+                    yield key, (p0, p1, p2)
 
-                    # TODO may be removed
-                    # calculate an estimation for the radius
-                    r = 0
-                    for p in (p0, p1, p2):
-                        d = np.linalg.norm(center - np.array(p))
-                        if d > r:
-                            r = int(d * 1.3)
+    def _calc_triangles(self):
+        """
+        Choose all triangles by exploring whether intersection is transitive:
+          - intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
+        If this implication holds: calculate the barycenter.
 
-                    triangles[key] = tuple(center) + (r, )
+        The resulting triangles are again filtered to only contain those
+        which are likely to resemble a yield sign.
+
+        """
+        triangles = {}
+        for key, (p0, p1, p2) in self._iter_triangles():
+
+            # abort if there's no red to be found on the vertices
+
+            # calculate the (bary)center by taking the
+            # sum of all vertices and divide them by
+            # their amount (always 3 in this case)
+            center = np.array([np.sum(z) // 3 for z in zip(p0, p1, p2)])
+
+            # TODO may be removed
+            # calculate an estimation for the radius
+            r = 0
+            for p in (p0, p1, p2):
+                d = np.linalg.norm(center - np.array(p))
+                if d > r:
+                    r = int(d * 1.3)
+
+            triangles[key] = tuple(center) + (r, )
 
         # finally, filter found triangles
         log.info('found %d triangles', len(triangles))
