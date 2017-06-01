@@ -19,11 +19,11 @@ def logger(name):
 # ---
 
 
-def tmeasure(l: logging.Logger, msg: str, *args):
+def tmeasure(l, msg: str):
     tstart = datetime.now()
 
-    def _done():
+    def _done(*args):
         tdelta = (datetime.now() - tstart).microseconds / 1000
-        l.info(msg, *((tdelta, ) + args))
+        l(msg, *((tdelta, ) + args))
 
     return _done
