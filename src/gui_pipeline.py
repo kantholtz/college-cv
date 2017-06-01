@@ -198,6 +198,10 @@ class Preprocessing(Tab):
 
     def _init_gui(self):
         self._widget = gui_image.ImageModule(self._mod_binarize.arr)
+
+        self._view_erode = self.widget.add_view(
+            self._mod_erode.arr, stats_right=None)
+
         self._view_dilate = self.widget.add_view(
             self._mod_dilate.arr, stats_right=True)
 
@@ -216,25 +220,35 @@ class Preprocessing(Tab):
         self._add_slider(layout, fn, 1, 100, 100,
                          initial=init, label='Binarization δ')
 
+        self._mod_erode.iterations = 0
+        init = self._mod_erode.iterations
+        fn = self._mod_proxy(self._mod_erode, 'iterations')
+        self._add_slider(layout, fn, 0, 10,
+                         initial=init, label='Erosion iterations')
+
+        self._mod_dilate.iterations = 0
         init = self._mod_dilate.iterations
         fn = self._mod_proxy(self._mod_dilate, 'iterations')
-        self._add_slider(layout, fn, 1, 10,
+        self._add_slider(layout, fn, 0, 10,
                          initial=init, label='Dilation iterations')
 
         controls.addLayout(layout)
 
     def __init__(self):
-        super().__init__('Binarization and Dilation')
+        super().__init__('Binarization and Erosion')
 
         self._mod_binarize = pl.Binarize('binarize')
+        self._mod_erode = pl.Erode('erode')
         self._mod_dilate = pl.Dilate('dilate')
 
         self + self._mod_binarize
+        self + self._mod_erode
         self + self._mod_dilate
 
     def update(self):
         try:
             self.widget.view.image.arr = self._mod_binarize.arr
+            self._view_erode.image.arr = self._mod_erode.arr
             self._view_dilate.image.arr = self._mod_dilate.arr
 
         except AttributeError:
@@ -276,6 +290,24 @@ class Hough(Tab):
     @result.setter
     def result(self, barycenter):
         tgt = self._mod_hough.arr / 3
+        h, w, _ = tgt.shape
+
+        self._draw_lines(tgt, self._mod_hough.angles, self._mod_hough.dists)
+
+        # ---
+
+        for y, x in self._unpack(self._mod_hough.pois):
+            rr, cc = skd.circle(y, x, 3)
+            tgt[rr, cc] = [255, 255, 255]
+
+        for y, x, r in self._mod_hough.barycenter.values():
+            rr, cc = skd.circle(y, x, 3)
+            tgt[rr, cc] = [0, 125, 255]
+
+            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+            tgt[rr, cc, 0] += vv * 255
+
+            tgt[tgt > 255] = 255
 
         for y, x, r in barycenter:
             rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
@@ -288,6 +320,38 @@ class Hough(Tab):
             tgt[rr, cc] *= 3
 
         self._result = tgt
+
+    def _draw_lines(self, tgt, angles, dists):
+        h, w, _ = tgt.shape
+
+        def _bound(val: int, bound: int) -> int:
+            if val < 0:
+                return 0
+            elif val > bound:
+                return bound
+            else:
+                return val
+
+        for a, d in zip(angles, dists):
+            # TODO division by zero for a=[01]
+
+            y0 = int(d / np.sin(a))
+            y1 = int((d - w * np.cos(a)) / np.sin(a))
+
+            x0 = int(d / np.cos(a))
+            x1 = int((d - h * np.sin(a)) / np.cos(a))
+
+            y0, y1 = [int(_bound(y, h-1)) for y in (y0, y1)]
+            x0, x1 = [int(_bound(x, w-1)) for x in (x0, x1)]
+
+            # TODO: revise; see pipeline.py Hough.execute
+            if a > 0:
+                y0, y1 = y1, y0
+
+            if (y0 >= 0 and y1 >= 0):
+                rr, cc, vv = skd.line_aa(y0, x0, y1, x1)
+                tgt[rr, cc, 0] += vv * 255
+                tgt[tgt > 255] = 255
 
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
@@ -323,57 +387,10 @@ class Hough(Tab):
         self + self._mod_hough
 
     def update(self):
-        tgt = self._mod_hough.arr / 4
-        h, w, _ = tgt.shape
-
-        def _bound(val: int, bound: int) -> int:
-            if val < 0:
-                return 0
-            elif val > bound:
-                return bound
-            else:
-                return val
-
-        for a, d in zip(self._mod_hough.angles, self._mod_hough.dists):
-            # TODO division by zero for a=[01]
-
-            y0 = int(d / np.sin(a))
-            y1 = int((d - w * np.cos(a)) / np.sin(a))
-
-            x0 = int(d / np.cos(a))
-            x1 = int((d - h * np.sin(a)) / np.cos(a))
-
-            y0, y1 = [int(_bound(y, h-1)) for y in (y0, y1)]
-            x0, x1 = [int(_bound(x, w-1)) for x in (x0, x1)]
-
-            # TODO: revise; see pipeline.py Hough.execute
-            if a > 0:
-                y0, y1 = y1, y0
-
-            if (y0 >= 0 and y1 >= 0):
-                rr, cc, vv = skd.line_aa(y0, x0, y1, x1)
-                tgt[rr, cc, 0] += vv * 255
-                tgt[tgt > 255] = 255
-
-        # ---
-        for y, x in self._unpack(self._mod_hough.pois):
-            rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [255, 255, 255]
-
-        for y, x, r in self._mod_hough.barycenter.values():
-            rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [0, 125, 255]
-
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-
-            tgt[tgt > 255] = 255
-
         self.result = self._mod_hough.barycenter.values()
 
         try:
-            # self._result = tgt
-            self.widget.view.image.arr = tgt
+            self.widget.view.image.arr = self.result
 
         except AttributeError:
-            self._init_gui(tgt)
+            self._init_gui(self.result)

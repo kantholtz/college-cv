@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 
-from datetime import datetime
 from itertools import combinations
 from collections import defaultdict
 
@@ -38,13 +37,12 @@ class Pipeline():
 
         return self
 
-    def _ts(self, fmt: str, t_start: datetime, *args) -> None:
-        delta = (datetime.now() - t_start).microseconds / 1000
-        log.debug(fmt, delta, *args)
-
     def _run(self, name: str) -> None:
         mod = self._modules[name]
+
         mod.arr = mod.execute()
+        assert mod.arr is not None
+
         self._modules_executed.append(mod)
 
     # --- initialization
@@ -60,7 +58,7 @@ class Pipeline():
 
     def run(self):
         executed = tmeasure(log.info, 'finished pipeline in %sms')
-        log.info('>>> running pipeline')
+        log.info('running pipeline\n' + 40 * '-')
 
         self._modules_executed = [self._mod_initial]
         for name in self._module_names:
@@ -145,7 +143,7 @@ class Binarize(Module):
         return tgt
 
 
-class Dilate(Module):
+class Morph(Module):
 
     @property
     def iterations(self):
@@ -157,16 +155,45 @@ class Dilate(Module):
 
     def __init__(self, name: str):
         super().__init__(name)
-        self._iterations = 2
+        self._iterations = 1
+
+
+class Dilate(Morph):
+
+    def __init__(self, name: str):
+        super().__init__(name)
 
     def execute(self) -> np.ndarray:
         log.info('dilate with %d iterations', self.iterations)
+
         src = self.pipeline[-1].arr
+        if self.iterations == 0:
+            return src
+
         tgt = np.zeros(src.shape)
         tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
+
         return tgt
 
 
+class Erode(Morph):
+
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def execute(self) -> np.ndarray:
+        log.info('erode with %d iterations', self.iterations)
+
+        src = self.pipeline[-1].arr
+        if self.iterations == 0:
+            return src
+
+        tgt = np.zeros(src.shape)
+        tgt[scnd.binary_erosion(src, iterations=self.iterations)] = 255
+        return tgt
+
+
+# Currently unused...
 class Fill(Module):
 
     def __init__(self, name: str):
@@ -427,22 +454,34 @@ class Hough(Module):
 
     def execute(self) -> np.ndarray:
         self._src = self.pipeline[-1].arr
+        tgt = self.pipeline[0].arr
+
         h, w = self._src.shape
 
-        # points of intersections
-        self._pois = defaultdict(dict)
-
-        # triangles, mapped by tuple -> tuple
-        self._barycenter = None
+        # reset
+        self._pois = defaultdict(dict)  # points of intersections
+        self._barycenter = {}           # triangles, mapped by tuple -> tuple
+        self._angles = []
+        self._dists = []
 
         # --- apply hough transformation
 
-        done = tmeasure(log.debug, ' skt hough: %sms')
-        _, angles, dists = skt.hough_line_peaks(
-            *skt.hough_line(self.src),
-            min_angle=self.min_angle,
-            min_distance=self.min_distance)
-        done()
+        done = tmeasure(log.debug, ' skt hough: %sms, found %d lines')
+
+        try:
+            _, angles, dists = skt.hough_line_peaks(
+                *skt.hough_line(self.src),
+                min_angle=self.min_angle,
+                min_distance=self.min_distance)
+
+        # this is thrown if no peaks are found
+        except IndexError:
+            angles = []
+
+        done(len(angles))
+
+        if len(angles) == 0:
+            return tgt
 
         self._angles = angles
         self._dists = dists
@@ -494,4 +533,4 @@ class Hough(Module):
         # and filtering triangles
         self._calc_triangles()
 
-        return self.pipeline[0].arr
+        return tgt
