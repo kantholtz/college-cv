@@ -101,6 +101,16 @@ class PipelineGUI():
 
 class Tab(qtw.QWidget):
 
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def widget(self) -> qtw.QWidget:
+        return self._widget
+
+    # --- utility
+
     def _add_slider(self,
                     parent: qtw.QLayout,
                     callback,
@@ -110,13 +120,10 @@ class Tab(qtw.QWidget):
                     initial: float = None,
                     label: str = None):
         """
-        Creates a proxy callback function to recalculate the sliders value
-        based on the provided factor
+        Utility method to easily add sliders
 
         """
-        if label is not None:
-            parent.addWidget(qtw.QLabel(label))
-
+        qlabel = None
         slider = qtw.QSlider(qtc.Qt.Horizontal, self)
         slider.setFocusPolicy(qtc.Qt.NoFocus)
 
@@ -124,22 +131,35 @@ class Tab(qtw.QWidget):
         slider.setMaximum(smax)
 
         if initial is not None:
-            val = initial * sfac
-            slider.setValue(val)
+            slider.setValue(initial * sfac)
 
+        # proxies the slider-released-event to update the label
+        # containing the current value and applying the factor
+        # before invoking the provided callback
         def proxy():
-            callback(slider.value() / sfac)
+            val = slider.value() / sfac
+            if qlabel is not None:
+                qlabel.setText(str(val))
+            callback(val)
 
         slider.sliderReleased.connect(proxy)
+
+        if label is not None:
+            layout = qtw.QHBoxLayout()
+            layout.addWidget(qtw.QLabel(label))
+
+            qlabel = qtw.QLabel(str(initial or ""))
+            layout.addWidget(qlabel)
+
+            parent.addLayout(layout)
+
         parent.addWidget(slider)
 
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def widget(self) -> qtw.QWidget:
-        return self._widget
+    def _mod_proxy(self, mod, prop):
+        def _callback(val):
+            mod.__setattr__(prop, val)
+            self.ping()
+        return _callback
 
     def __add__(self, mod):
         assert isinstance(mod, pl.Module)
@@ -181,29 +201,23 @@ class Preprocessing(Tab):
         self._view_dilate = self.widget.add_view(
             self._mod_dilate.arr, stats_right=True)
 
-        def proxy(mod, prop):
-            def _callback(val):
-                mod.__setattr__(prop, val)
-                self.ping()
-            return _callback
-
         # ---
 
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
         init = self._mod_binarize.amplification
-        fn = proxy(self._mod_binarize, 'amplification')
-        self._add_slider(layout, fn, 1, 10, 5,
+        fn = self._mod_proxy(self._mod_binarize, 'amplification')
+        self._add_slider(layout, fn, 5, 10, 5,
                          initial=init, label='Red amplification')
 
         init = self._mod_binarize.threshold
-        fn = proxy(self._mod_binarize, 'threshold')
+        fn = self._mod_proxy(self._mod_binarize, 'threshold')
         self._add_slider(layout, fn, 1, 100, 100,
                          initial=init, label='Binarization δ')
 
         init = self._mod_dilate.iterations
-        fn = proxy(self._mod_dilate, 'iterations')
+        fn = self._mod_proxy(self._mod_dilate, 'iterations')
         self._add_slider(layout, fn, 1, 10,
                          initial=init, label='Dilation iterations')
 
@@ -277,6 +291,23 @@ class Hough(Tab):
 
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
+
+        # ---
+
+        controls = self.widget.view.controls
+        layout = qtw.QVBoxLayout()
+
+        init = self._mod_hough.min_angle
+        fn = self._mod_proxy(self._mod_hough, 'min_angle')
+        self._add_slider(layout, fn, 1, 90,
+                         initial=init, label='Minimum angle')
+
+        init = self._mod_hough.min_distance
+        fn = self._mod_proxy(self._mod_hough, 'min_distance')
+        self._add_slider(layout, fn, 1, 200,
+                         initial=init, label='Minimum distance')
+
+        controls.addLayout(layout)
 
     def _unpack(self, dic):
         """

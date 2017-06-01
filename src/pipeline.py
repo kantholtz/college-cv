@@ -208,6 +208,28 @@ class Hough(Module):
     def src(self) -> np.ndarray:
         return self._src
 
+    # ---
+
+    @property
+    def min_angle(self) -> int:
+        return self._min_angle
+
+    @min_angle.setter
+    def min_angle(self, a: int):
+        assert 0 < a and a < 90
+        self._min_angle = int(a)
+
+    @property
+    def min_distance(self) -> int:
+        return self._min_distance
+
+    @min_distance.setter
+    def min_distance(self, d: int):
+        assert 0 < d and d < 200
+        self._min_distance = int(d)
+
+    # ---
+
     @property
     def angles(self) -> np.array:
         return self._angles
@@ -399,23 +421,27 @@ class Hough(Module):
     def __init__(self, name: str):
         super().__init__(name)
 
+        # defaults
+        self.min_angle = 45
+        self.min_distance = 100
+
+    def execute(self) -> np.ndarray:
+        self._src = self.pipeline[-1].arr
+        h, w = self._src.shape
+
         # points of intersections
         self._pois = defaultdict(dict)
 
         # triangles, mapped by tuple -> tuple
         self._barycenter = None
 
-    def execute(self) -> np.ndarray:
-        self._src = self.pipeline[-1].arr
-        h, w = self._src.shape
-
         # --- apply hough transformation
 
-        done = tmeasure(log.debug, '  skt hough: %sms')
+        done = tmeasure(log.debug, ' skt hough: %sms')
         _, angles, dists = skt.hough_line_peaks(
             *skt.hough_line(self.src),
-            min_angle=10,
-            min_distance=100)
+            min_angle=self.min_angle,
+            min_distance=self.min_distance)
         done()
 
         self._angles = angles
