@@ -199,11 +199,11 @@ class Preprocessing(Tab):
     def _init_gui(self):
         self._widget = gui_image.ImageModule(self._mod_binarize.arr)
 
+        self._view_dilate = self.widget.add_view(
+            self._mod_dilate.arr, stats_right=None)
+
         self._view_erode = self.widget.add_view(
             self._mod_erode.arr, stats_right=None)
-
-        self._view_dilate = self.widget.add_view(
-            self._mod_dilate.arr, stats_right=True)
 
         # ---
 
@@ -220,31 +220,28 @@ class Preprocessing(Tab):
         self._add_slider(layout, fn, 1, 100, 100,
                          initial=init, label='Binarization δ')
 
-        init = self._mod_erode.iterations
-        fn = self._mod_proxy(self._mod_erode, 'iterations')
-        self._add_slider(layout, fn, 0, 10,
-                         initial=init, label='Erosion iterations')
-
         init = self._mod_dilate.iterations
         fn = self._mod_proxy(self._mod_dilate, 'iterations')
         self._add_slider(layout, fn, 0, 10,
                          initial=init, label='Dilation iterations')
 
+        init = self._mod_erode.iterations
+        fn = self._mod_proxy(self._mod_erode, 'iterations')
+        self._add_slider(layout, fn, 0, 10,
+                         initial=init, label='Erosion iterations')
+
         controls.addLayout(layout)
 
     def __init__(self):
-        super().__init__('Binarization and Erosion')
+        super().__init__('Binarization and Dilation')
 
-        self._mod_binarize = pl.Binarize('binarize')
-        self._mod_erode = pl.Erode('erode')
-        self._mod_dilate = pl.Dilate('dilate')
-
-        self._mod_erode.iterations = 0
-        self._mod_dilate.iterations = 0
+        self._mod_binarize = pl.Binarize('pre_binarize')
+        self._mod_erode = pl.Erode('pre_erode')
+        self._mod_dilate = pl.Dilate('pre_dilate')
 
         self + self._mod_binarize
-        self + self._mod_erode
         self + self._mod_dilate
+        self + self._mod_erode
 
     def update(self):
         try:
@@ -259,24 +256,50 @@ class Preprocessing(Tab):
 class EdgeDetection(Tab):
 
     def _init_gui(self):
-        self._widget = gui_image.ImageModule(self._mod_edger.arr)
-        # self._widget = gui_image.ImageModule(self._mod_fill.arr)
-        # self._view_edger = self.widget.add_view(
-        #     self._mod_edger.arr, stats_right=True)
+        self._widget = gui_image.ImageModule(self._mod_erode.arr)
+
+        self._view_dilate = self.widget.add_view(
+            self._mod_dilate.arr, stats_right=None)
+
+        self._view_edger = self.widget.add_view(
+            self._mod_edger.arr, stats_right=None)
+
+        # ---
+
+        controls = self.widget.view.controls
+        layout = qtw.QVBoxLayout()
+
+        init = self._mod_erode.iterations
+        fn = self._mod_proxy(self._mod_erode, 'iterations')
+        self._add_slider(layout, fn, 0, 10,
+                         initial=init, label='Erosion iterations')
+
+        init = self._mod_dilate.iterations
+        fn = self._mod_proxy(self._mod_dilate, 'iterations')
+        self._add_slider(layout, fn, 0, 10,
+                         initial=init, label='Dilation iterations')
+
+        controls.addLayout(layout)
 
     def __init__(self):
         super().__init__('Edge Exposure')
-        # self._mod_fill = pl.Fill('fill')
-        self._mod_edger = pl.Edger('edger')
 
-        # self + self._mod_fill
+        self._mod_erode = pl.Erode('edge_erode')
+        self._mod_dilate = pl.Dilate('edge_dilate')
+        self._mod_edger = pl.Edger('edge_edger')
+
+        self._mod_erode.iterations = 0
+        self._mod_dilate.iterations = 2
+
+        self + self._mod_erode
+        self + self._mod_dilate
         self + self._mod_edger
 
     def update(self):
         try:
-            self.widget.view.image.arr = self._mod_edger.arr
-            # self.widget.view.image.arr = self._mod_fill.arr
-            # self._view_edger.image.arr = self._mod_edger.arr
+            self.widget.view.image.arr = self._mod_erode.arr
+            self._view_dilate.image.arr = self._mod_dilate.arr
+            self._view_edger.image.arr = self._mod_edger.arr
 
         except AttributeError:
             self._init_gui()
@@ -327,16 +350,24 @@ class Hough(Tab):
 
     def _draw_points(self, tgt):
         mod = self._mod_hough
+        off = self._mod_hough.red_detection // 2
 
         # points of intersection
         for y, x in self._unpack(mod.pois):
-            rr, cc = skd.circle(y, x, 2)
+            rr, cc = skd.circle(y, x, 1)
+            tgt[rr, cc] = [255, 255, 255]
+
+            # draw clockwise from top left
+            rr, cc = skd.polygon_perimeter(
+                [y-off, y-off, y+off, y+off, y-off],
+                [x-off, x+off, x+off, x-off, x-off])
+
             tgt[rr, cc] = [255, 255, 255]
 
         # barycenters
         for y, x, r in mod.barycenter.values():
-            rr, cc = skd.circle(y, x, 3)
-            tgt[rr, cc] = [0, 125, 255]
+            rr, cc = skd.circle(y, x, 2)
+            tgt[rr, cc] = [0, 255, 0]
 
             rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
             tgt[rr, cc, 0] += vv * 255
@@ -383,6 +414,11 @@ class Hough(Tab):
         init = self._mod_hough.min_distance
         fn = self._mod_proxy(self._mod_hough, 'min_distance')
         self._add_slider(layout, fn, 1, 200,
+                         initial=init, label='Minimum distance')
+
+        init = self._mod_hough.red_detection
+        fn = self._mod_proxy(self._mod_hough, 'red_detection')
+        self._add_slider(layout, fn, 3, 50,
                          initial=init, label='Minimum distance')
 
         controls.addLayout(layout)

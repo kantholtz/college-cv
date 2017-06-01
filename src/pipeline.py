@@ -255,6 +255,16 @@ class Hough(Module):
         assert 0 < d and d < 200
         self._min_distance = int(d)
 
+    @property
+    def red_detection(self) -> int:
+        return self._red_detection
+
+    @red_detection.setter
+    def red_detection(self, size: int):
+        assert 0 < size
+        print('set red_detection', size)
+        self._red_detection = int(size)
+
     # ---
 
     @property
@@ -339,26 +349,37 @@ class Hough(Module):
         """
         Choose all triangles by exploring whether intersection is transitive:
           - intersect(g0, g1) and intersect(g0, g1) -> intersect(g1, g2))
-        If this implication holds: calculate the barycenter.
+
+        Only consider those, where the area around the point of intersection
+        contains some red color values.
+
+        If these implications hold: calculate the barycenter.
 
         The resulting triangles are again filtered to only contain those
         which are likely to resemble a yield sign.
 
         """
+        binarized = self.pipeline['edge_dilate'].arr
         triangles = {}
-        for key, (p0, p1, p2) in self._iter_triangles():
+        off = self.red_detection // 2
+
+        for key, points in self._iter_triangles():
 
             # abort if there's no red to be found on the vertices
+            areas = [binarized[y-off:y+off, x-off:x+off] for y, x in points]
+            if len(list(filter(lambda a: np.any(a > 0), areas))) != 3:
+                log.debug('discarding %s because it lacks red', key)
+                continue
 
             # calculate the (bary)center by taking the
             # sum of all vertices and divide them by
             # their amount (always 3 in this case)
-            center = np.array([np.sum(z) // 3 for z in zip(p0, p1, p2)])
+            center = np.array([np.sum(z) // 3 for z in zip(*points)])
 
             # TODO may be removed
             # calculate an estimation for the radius
             r = 0
-            for p in (p0, p1, p2):
+            for p in points:
                 d = np.linalg.norm(center - np.array(p))
                 if d > r:
                     r = int(d * 1.3)
@@ -458,6 +479,7 @@ class Hough(Module):
         # defaults
         self.min_angle = 45
         self.min_distance = 100
+        self.red_detection = 10
 
     def execute(self) -> np.ndarray:
         self._src = self.pipeline[-1].arr
