@@ -1,0 +1,163 @@
+\documentclass{report}
+
+% \usepackage[ngerman]{babel}
+\usepackage[utf8]{inputenc}
+
+% fonts
+\usepackage{geometry,amsmath,amsfonts,metalogo,hyperref,mdwlist,array,multicol,fontawesome,color}
+\usepackage[default,osf]{sourcesanspro}
+\usepackage[scaled=.95]{sourcecodepro}
+\linespread{1.3}
+
+% figures
+\usepackage{subfig}
+\usepackage{float}
+\restylefloat{figure}
+
+\usepackage{wrapfig}
+
+\begin{document}
+
+
+%
+%   SHOW OFF
+%
+
+
+{\centering
+
+  \begin{figure}
+    \vspace{3cm}
+
+    \centering
+    \includegraphics[width=0.3\textwidth]{src/yield}
+
+    \vspace{4cm}
+  \end{figure}
+
+
+  {\Huge\textbf{Yield Sign Detection}}
+  \vspace{.4cm}
+
+  Felix Hamann
+
+  \vspace{.2cm}
+
+  \today
+
+}
+
+
+%
+%   CONTENT
+%
+
+\tableofcontents
+
+
+\chapter{Introduction}
+
+This document describes the implementation of a system to detect yield
+signs from images.
+
+{\color{red}{
+    \begin{enumerate}
+    \item \textit{Notation definitions}
+    \item \textit{Image test set}
+    \item \textit{Requirements}
+      \begin{enumerate}
+      \item \textit{Changing light (night, day, dawn, dusk)}
+      \item \textit{Performance}
+      \end{enumerate}
+    \end{enumerate}
+}}
+
+
+\pagebreak
+\section{Filter pipeline overview}
+...
+
+\begin{enumerate}
+\item Binarization
+
+  \begin{enumerate}
+  \item Red Amplification
+  \item Binarization
+  \end{enumerate}
+
+\end{enumerate}
+
+
+\pagebreak
+\section{Binarization}
+
+The first step of the whole pipeline consists of extracting the red
+color from the coloured input image \textit{source}. Thus a mapping
+for each pixel from three dimensions to one dimension is
+needed. Simply returning the red color component does not suffice, as
+with larger values of the green and blue components the source color
+either shifts towards yellow, magenta or white. A very simple method
+that is used in this application takes the red component, optionally
+amplifies it by some factor and substracts the green and blue
+components values.
+
+Let \( \Gamma = \{0, 1, ..., 255\} \) be all possible pixel values, \(
+\delta \in \Gamma \) the threshold and \( \alpha \in \mathbb{R},
+\alpha \geq 1 \) the factor for red amplification, then the pixel
+written to the binarized image \textit{target} is:
+
+\begin{equation}\label{eq:binarization}
+  \begin{split}
+    f & : \Gamma \times \Gamma \times \Gamma \to \mathbb{Z} \\
+    f(r, g, b) & = \alpha r - (g + b) \\
+    target(y, x) & =
+    \begin{cases}
+      255 & \quad \text{if } f(source(y, x)) > \delta \\
+      0   & \quad \text{else}
+    \end{cases}
+  \end{split}
+\end{equation}
+
+This method has one drawback however. There is no distinction between
+less saturated or darker shades of red and orange or magenta. This is
+a result of not taking the distance between green and blue into
+account. An example is depicted in Table
+\ref{table:binarization}. More elaborate variations of this
+calculation were tested (considering the ratio of red to all colors or
+weighting by green-blue distance) but this did not increase the
+overall quality of red detection. Actually, without constantly white
+balancing the camera used for capturing, narrowing the range of red
+would perform worse as the ambient light differs greatly over the
+course of a day. The drawback of this approach are more falsely marked
+areas of the image that have to be considered in all further steps.
+
+\begin{table}
+  \begin{tabular}{c r r r r r}
+
+    \textbf{Color} & \textbf{Red} & \textbf{Green} & \textbf{Blue} &
+    \textbf{\textit{f(r, g, b)}} & \textbf{\textit{target(y, x)}} \\ \hline
+
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_000000}} &   0 &   0 &   0 &    0 &   0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ffffff}} & 255 & 255 & 255 &  -51 &   0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_00ff00}} &   0 & 255 &   0 & -255 &   0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_0000ff}} &   0 &   0 & 255 & -255 &   0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0000}} & 255 &   0 &   0 &  459 & 255 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8888}} & 255 & 125 & 125 &  209 & 255 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8800}} & 255 & 125 &   0 &  334 & 255 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0088}} & 255 &   0 & 126 &  334 & 255
+
+  \end{tabular}
+  \caption{Example results of function \textit{f} in
+    \ref{eq:binarization} with \( \alpha=1.8, \delta=200 \). Note that
+    the result is equivalent for light red, orange and magenta.}
+  \label{table:binarization}
+\end{table}
+
+Performance is nice.
+
+
+\subsection{Foo}
+
+bar
+
+\end{document}
