@@ -120,13 +120,13 @@ class Binarize(Module):
 
     @amplification.setter
     def amplification(self, amplification: float):
-        assert amplification > 0
+        assert 0 < amplification
         self._amplification = amplification
 
     def __init__(self, name: str):
         super().__init__(name)
         self._threshold = 0.3
-        self._amplification = 1.5
+        self._amplification = 1.8
 
     def execute(self) -> np.ndarray:
         log.info('binarize: threshold=%f, amplification=%f',
@@ -262,7 +262,6 @@ class Hough(Module):
     @red_detection.setter
     def red_detection(self, size: int):
         assert 0 < size
-        print('set red_detection', size)
         self._red_detection = int(size)
 
     # ---
@@ -283,6 +282,36 @@ class Hough(Module):
     def barycenter(self) -> dict:
         return self._barycenter
 
+    def _iter_intersections(self, h_coords: np.ndarray):
+        h, w = self.src.shape
+        n, _ = h_coords.shape
+
+        def _check(poi):
+            if poi[2] == 0:
+                return False
+
+            poi[0] /= poi[2]
+            poi[1] /= poi[2]
+
+            # adjust boundaries for truncated triangles here
+            border = 1.2 * min(h, w)
+            if (
+                    min(poi[0], poi[1]) < -border or
+                    poi[0] >= h + border or
+                    poi[1] >= w + border):
+                return False
+
+            return True
+
+        # Take each homogeneous vector and calculate possible
+        # intersections with all other vectors
+        for i, coord in enumerate(h_coords):
+            current = np.full((n, 3), coord)
+
+            for j, poi in enumerate(np.cross(current, h_coords)):
+                if _check(poi):
+                    yield i, j, tuple(map(int, poi[:2]))
+
     def _calc_intersections(self, h_coords: np.ndarray):
         """
         Calculate points of intersections and map every
@@ -296,28 +325,21 @@ class Hough(Module):
               (int -> int -> tuple(3))
 
         """
-        n, _ = h_coords.shape
-        h, w = self.src.shape
+        binarized = self.pipeline['edge_dilate'].arr
+        off = self.red_detection // 2
 
-        # Take each homogeneous vector and calculate possible
-        # intersections with all other vectors
-        for i, coord in enumerate(h_coords):
-            current = np.full((n, 3), coord)
+        for i, j, coords in self._iter_intersections(h_coords):
+            y, x = coords
 
-            for j, poi in enumerate(np.cross(current, h_coords)):
-                if poi[2] == 0:
-                    continue
+            # abort if there's no red to be found on
+            # the point of intersection
+            if not np.any(binarized[y-off:y+off, x-off:x+off]):
+                fmt = 'discarding %s because it lacks red'
+                log.debug(fmt, str(coords))
+                continue
 
-                poi[0] /= poi[2]
-                poi[1] /= poi[2]
-
-                # adjust boundaries for truncated triangles here
-                if (min(poi[0], poi[1]) < 0 or poi[0] >= h or poi[1] >= w):
-                    continue
-
-                coords = tuple(map(int, poi[:2]))
-                a, b = min(i, j), max(i, j)
-                self._pois[a][b] = coords
+            a, b = min(i, j), max(i, j)
+            self._pois[a][b] = coords
 
     def _iter_triangles(self):
         triangles = set()
@@ -359,17 +381,9 @@ class Hough(Module):
         which are likely to resemble a yield sign.
 
         """
-        binarized = self.pipeline['edge_dilate'].arr
         triangles = {}
-        off = self.red_detection // 2
 
         for key, points in self._iter_triangles():
-
-            # abort if there's no red to be found on the vertices
-            areas = [binarized[y-off:y+off, x-off:x+off] for y, x in points]
-            if len(list(filter(lambda a: np.any(a > 0), areas))) != 3:
-                log.debug('discarding %s because it lacks red', key)
-                continue
 
             # calculate the (bary)center by taking the
             # sum of all vertices and divide them by
@@ -382,7 +396,7 @@ class Hough(Module):
             for p in points:
                 d = np.linalg.norm(center - np.array(p))
                 if d > r:
-                    r = int(d * 1.3)
+                    r = int(d * 1.1)
 
             triangles[key] = tuple(center) + (r, )
 
@@ -479,7 +493,7 @@ class Hough(Module):
         # defaults
         self.min_angle = 45
         self.min_distance = 100
-        self.red_detection = 10
+        self.red_detection = 15
 
     def execute(self) -> np.ndarray:
         self._src = self.pipeline[-1].arr

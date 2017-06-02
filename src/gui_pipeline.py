@@ -212,7 +212,7 @@ class Preprocessing(Tab):
 
         init = self._mod_binarize.amplification
         fn = self._mod_proxy(self._mod_binarize, 'amplification')
-        self._add_slider(layout, fn, 5, 10, 5,
+        self._add_slider(layout, fn, 5, 15, 5,
                          initial=init, label='Red amplification')
 
         init = self._mod_binarize.threshold
@@ -354,13 +354,14 @@ class Hough(Tab):
 
         # points of intersection
         for y, x in self._unpack(mod.pois):
-            rr, cc = skd.circle(y, x, 1)
+            rr, cc = skd.circle(y, x, 1, shape=tgt.shape)
             tgt[rr, cc] = [255, 255, 255]
 
             # draw clockwise from top left
             rr, cc = skd.polygon_perimeter(
                 [y-off, y-off, y+off, y+off, y-off],
-                [x-off, x+off, x+off, x-off, x-off])
+                [x-off, x+off, x+off, x-off, x-off],
+                shape=tgt.shape)
 
             tgt[rr, cc] = [255, 255, 255]
 
@@ -381,8 +382,9 @@ class Hough(Tab):
         return tgt
 
     def _draw_result(self):
+        fac = 5
         mod = self._mod_hough
-        tgt = mod.arr / 3
+        tgt = mod.arr / fac
         h, w, _ = tgt.shape
 
         barycenter = mod.barycenter.values()
@@ -394,7 +396,7 @@ class Hough(Tab):
             tgt[tgt > 255] = 255
 
             rr, cc = skd.circle(y, x, r, shape=tgt.shape)
-            tgt[rr, cc] *= 3
+            tgt[rr, cc] *= fac
 
         return tgt
 
@@ -419,7 +421,7 @@ class Hough(Tab):
         init = self._mod_hough.red_detection
         fn = self._mod_proxy(self._mod_hough, 'red_detection')
         self._add_slider(layout, fn, 3, 50,
-                         initial=init, label='Minimum distance')
+                         initial=init, label='Red detection area')
 
         controls.addLayout(layout)
 
