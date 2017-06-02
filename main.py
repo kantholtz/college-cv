@@ -11,7 +11,7 @@ import sys
 import argparse
 
 import numpy as np
-import scipy.ndimage as spnd
+import skimage.io as skio
 import PyQt5.QtWidgets as qtw
 
 from src import logger
@@ -21,6 +21,10 @@ log = logger(name=__name__[2:-2])
 
 
 class MainWindow(qtw.QMainWindow):
+
+    @property
+    def pipeline(self) -> gui_pipeline.PipelineGUI:
+        return self._pipeline
 
     def _action(self, text, handler, tip=None, shortcut=None):
         action = qtw.QAction(text, self)
@@ -42,6 +46,13 @@ class MainWindow(qtw.QMainWindow):
 
         return menu
 
+    def _iterate_mods(self):
+        i = 0
+        for tab in self.pipeline:
+            for mod in tab:
+                yield i, mod
+                i += 1
+
     # --- handler
 
     def _handle_load_file(self):
@@ -51,6 +62,12 @@ class MainWindow(qtw.QMainWindow):
         if fname:
             self.load_file(fname)
 
+    def _handle_save_file(self):
+        for i, mod in self._iterate_mods():
+            fname = 'img/out_%d_%s.png' % (i, mod.name)
+            log.info('saving %s', fname)
+            skio.imsave(fname, mod.arr.astype(np.uint8))
+
     # --- initialization
 
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
@@ -59,6 +76,10 @@ class MainWindow(qtw.QMainWindow):
                 'Load &File',
                 self._handle_load_file,
                 shortcut='Ctrl+f'),
+            self._action(
+                '&Save all images',
+                self._handle_save_file,
+                shortcut='Ctrl+s'),
             self._action(
                 '&Exit',
                 qtw.qApp.quit,
@@ -72,8 +93,8 @@ class MainWindow(qtw.QMainWindow):
     def _init_main(self, arr: np.ndarray) -> None:
         tabs = qtw.QTabWidget()
         self.setCentralWidget(tabs)
-        gui_pipeline.PipelineGUI(self, tabs, arr)
-        # tabs.setCurrentIndex(3)
+        self._pipeline = gui_pipeline.PipelineGUI(self, tabs, arr)
+        # tabs.setCurrentIndex(1)
 
     def __init__(self, app: qtw.QApplication, fname=None):
         super().__init__()
@@ -119,7 +140,7 @@ class MainWindow(qtw.QMainWindow):
 
     def load_file(self, fname: str) -> None:
         log.info('opening %s', fname)
-        arr = spnd.imread(fname, 0)
+        arr = skio.imread(fname)
         self._init_main(arr)
         self.message('Finished loading bitmap', 2000)
 
