@@ -164,6 +164,7 @@ areas of the image that have to be considered in all further steps.
 
 
 \section{Morphological operations}
+\label{sec:morph}
 
 At this point of the pipeline, the \textit{source} image is a binary
 image with all areas considered red marked true. The quality of the
@@ -339,7 +340,7 @@ into account.
     target(y, x) =
     \begin{cases}
       min(L) \quad L = L \setminus l & \quad \text{if } \forall m \in M: m = 0 \\
-      any(C) \quad C = \{ c | \forall c \in M \} \quad E = E \cup \{(m, n)\} & \quad \text{else}
+      any(M) \quad E = E \cup \{(m, n)\} \quad m, n \in M & \quad \text{else}
     \end{cases}
 \end{equation}
 
@@ -369,7 +370,43 @@ optionally enabled or disabled.
 
 \subsection{Finding points of intersection}
 
+The vectors returned by the hough transform contain the respective
+values describing each found line by their normal vector and distance
+from the images' origin. A simple method for detecting points of
+intersections is to create homogeneous vectors and use their cross
+product. If the third component is zero, no point of intersection is
+found. Let \( A \) be a vector containing all radii and \( \Delta \)
+contain all distances for \textit{n} found lines. Thus for any \( i
+\in 1, \dots, n \) the point of intersection \( x_I \) is defined as:
 
+\begin{equation}
+  \begin{split}
+    A & = (\alpha_1, \alpha_2, \dots, \alpha_n) \\
+    \Delta & = (\delta_1, \delta_2, \dots, \delta_n)
+  \end{split}
+\end{equation}
+
+\begin{align}\label{eq:poi}
+  v & = \begin{pmatrix}
+    sin(\alpha_i) * \delta_i \\ cos(\alpha_i) * \delta_i \\ 1
+  \end{pmatrix}
+  &
+  w & = \begin{pmatrix}
+    cos(\alpha_I) + v_o \\ -sin(\alpha_i) + v_1 \\ 1
+  \end{pmatrix}
+  &
+  x_i & = v \times w
+\end{align}
+
+Also, to keep all further computation small even if a lot of lines are
+found, the points of intersection are filtered by whether there is
+some red to be found nearby. To do so, the result of the morphological
+computations (section \ref{sec:morph}) is consulted and the point of
+intersection is kept if any white pixel is found there. The points are
+further filtered by whether they are inside the image plus some
+boundary. Even for truncated signs the relevant point of intersection
+is near the image boundary. The parameters for controlling the size of
+both the lookup area and the image boundary are free parameters.
 
 
 \subsection{Determining Triangles}
