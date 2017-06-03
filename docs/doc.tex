@@ -197,7 +197,7 @@ is only set if all surrounding pixels masked by \textit{S} are also
 set.
 
 \begin{equation}\label{eq:morph_mask}
-  S = \begin{bmatrix}
+  S_{y, x} = \begin{bmatrix}
 
     -              & source(y-1, x) & -              \\
     source(y, x-1) & source(y, x)   & source(y, x+1) \\
@@ -207,7 +207,7 @@ set.
 \end{equation}
 
 \begin{equation}\label{eq:morph_erosion}
-  target(y, x) = 1 \iff \bigwedge_{s \in S} s \neq 0
+  target(y, x) = 1 \iff \bigwedge_{s \in S_{y, x}} s \neq 0
 \end{equation}
 
 The functioning of the algorithm is depicted in
@@ -250,7 +250,7 @@ white form grows and the black grains inside that form vanish. Note
 that the form is not smoothed and the cut propagates to the target.
 
 \begin{equation}\label{eq:morph_dilation}
-  target(y, x) = 1 \iff \bigvee_{s \in S} s \neq 0
+  target(y, x) = 1 \iff \bigvee_{s \in S_{y, x}} s \neq 0
 \end{equation}
 
 \begin{align}\label{eq:morph_dilation-example}
@@ -329,7 +329,7 @@ checks for 8-connectivity as all eight neighboring pixels are taken
 into account.
 
 \begin{equation}
-  M = \begin{bmatrix}
+  M_{y, x} = \begin{bmatrix}
     source(y-1, x-1) & source(y-1, x) & source(y-1, x+1) \\
     source(y, x-1)   & source(y, x)   & -
   \end{bmatrix}
@@ -339,8 +339,8 @@ into account.
 \begin{equation}\label{eq:label}
     target(y, x) =
     \begin{cases}
-      min(L) \quad L = L \setminus l & \quad \text{if } \forall m \in M: m = 0 \\
-      any(M) \quad E = E \cup \{(m, n)\} \quad m, n \in M & \quad \text{else}
+      min(L) \quad L = L \setminus l & \quad \text{if } \forall m \in M_{y, x}: m = 0 \\
+      any(M) \quad E = E \cup \{(m, n)\} \quad m, n \in M_{y, x} & \quad \text{else}
     \end{cases}
 \end{equation}
 
@@ -400,29 +400,38 @@ contain all distances for \textit{n} found lines. Thus for any \( i
 
 Now all 2-permutations \( (i, j) \in \pi_2(n) \) are tried for
 calculating intersections \( p_{i,j} = h_i \times h_j \). Thus the set
-of all intersections is \(\{ (y, x) | y = \frac{p_{i, j, 0}}{p_{i, j,
-    2}}, x = \frac{p_{i, j, 1}}{p_{i, j, 2}} \forall p_{i, j, 2} \neq
-0 \}\). Also, to keep all further computation small even if a lot of
-lines are found, the points of intersection are filtered by whether
-there is some red to be found nearby. To do so, the result of the
-morphological computations (section \ref{sec:morph}) is consulted and
-the point of intersection is kept if any white pixel is found
-there. The points are further filtered by whether they are inside the
-image plus some boundary. Even for truncated signs the relevant point
-of intersection is near the image boundary. The parameters for
-controlling the size of both the lookup area and the image boundary
-are free parameters. The intersections are saved as an unambiguous
-mapping of \( min(i, j) \to max(i, j) \to (y, x) \).
+of all intersections is \(\{ (y, x)_{i, j} | y = \frac{p_{i, j,
+    0}}{p_{i, j, 2}}, x = \frac{p_{i, j, 1}}{p_{i, j, 2}} \forall
+p_{i, j, 2} \neq 0 \}\). Also, to keep all further computation small
+even if a lot of lines are found, the points of intersection are
+filtered by whether there is some red to be found nearby. To do so,
+the result of the morphological computations (section \ref{sec:morph})
+is consulted and the point of intersection is kept if any white pixel
+is found there. The points are further filtered by whether they are
+inside the image plus some boundary. Even for truncated signs the
+relevant point of intersection is near the image boundary. The
+parameters for controlling the size of both the lookup area and the
+image boundary are free parameters. The intersections are saved as an
+unambiguous mapping of \( T = min(i, j) \to max(i, j) \to (y, x)_{i,
+  j} \).
 
 
-\subsection{Determining Triangles}
+\subsection{Determining Triangles and Yield Signs}
 
+All the previously detected candidates are now iterated by checking
+whether any \( i, j, k \) exists where a combination of intersections
+is transitive, meaning \( (i, j, p_0), (j, k, p_1), (i, k, p_2) \in T
+\). If the condition holds, than the three points \( p_0, p_1, p_2 \)
+are the vertices of a triangle and the tuple \( (i, min(j,k),
+max(j,k)) \) unambiguously identifies it. Now they are be filtered
+further by discarding all triangles whose ratio does not fit (yield
+signs are nearly equilateral, even when taking perspective into
+account. Also signs can be discarded whose total size exceeds or
+undercuts some threshold. These threshold can be calculated based on
+the images size.
 
+{\color{red}{Pattern matching}}
 
-
-
-\subsection{Filtering Triangles for Yield Signs}
-{\color{red}{To be written}}
 
 
 \pagebreak
