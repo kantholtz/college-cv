@@ -377,7 +377,7 @@ intersections is to create homogeneous vectors and use their cross
 product. If the third component is zero, no point of intersection is
 found. Let \( A \) be a vector containing all radii and \( \Delta \)
 contain all distances for \textit{n} found lines. Thus for any \( i
-\in 1, \dots, n \) the point of intersection \( x_I \) is defined as:
+\in 1, \dots, n \) the homogeneous vector \( h_I \) is defined as:
 
 \begin{equation}
   \begin{split}
@@ -387,30 +387,38 @@ contain all distances for \textit{n} found lines. Thus for any \( i
 \end{equation}
 
 \begin{align}\label{eq:poi}
-  v & = \begin{pmatrix}
+  v_i & = \begin{pmatrix}
     sin(\alpha_i) * \delta_i \\ cos(\alpha_i) * \delta_i \\ 1
   \end{pmatrix}
   &
-  w & = \begin{pmatrix}
-    cos(\alpha_I) + v_o \\ -sin(\alpha_i) + v_1 \\ 1
-  \end{pmatrix}
+  w_i & = \begin{pmatrix}
+    cos(\alpha_i) \\ -sin(\alpha_i) \\ 0
+  \end{pmatrix} + v_i
   &
-  x_i & = v \times w
+  h_i & = v_i \times w_i
 \end{align}
 
-Also, to keep all further computation small even if a lot of lines are
-found, the points of intersection are filtered by whether there is
-some red to be found nearby. To do so, the result of the morphological
-computations (section \ref{sec:morph}) is consulted and the point of
-intersection is kept if any white pixel is found there. The points are
-further filtered by whether they are inside the image plus some
-boundary. Even for truncated signs the relevant point of intersection
-is near the image boundary. The parameters for controlling the size of
-both the lookup area and the image boundary are free parameters.
+Now all 2-permutations \( (i, j) \in \pi_2(n) \) are tried for
+calculating intersections \( p_{i,j} = h_i \times h_j \). Thus the set
+of all intersections is \(\{ (y, x) | y = \frac{p_{i, j, 0}}{p_{i, j,
+    2}}, x = \frac{p_{i, j, 1}}{p_{i, j, 2}} \forall p_{i, j, 2} \neq
+0 \}\). Also, to keep all further computation small even if a lot of
+lines are found, the points of intersection are filtered by whether
+there is some red to be found nearby. To do so, the result of the
+morphological computations (section \ref{sec:morph}) is consulted and
+the point of intersection is kept if any white pixel is found
+there. The points are further filtered by whether they are inside the
+image plus some boundary. Even for truncated signs the relevant point
+of intersection is near the image boundary. The parameters for
+controlling the size of both the lookup area and the image boundary
+are free parameters. The intersections are saved as an unambiguous
+mapping of \( min(i, j) \to max(i, j) \to (y, x) \).
 
 
 \subsection{Determining Triangles}
-{\color{red}{To be written}}
+
+
+
 
 
 \subsection{Filtering Triangles for Yield Signs}
