@@ -65,6 +65,7 @@ signs from images.
     \item \textit{Notation definitions}
       \begin{enumerate}
       \item \textit{Always height x width}
+      \item \textit{For binary images: 1 corresponds to white}
       \item \textit{For every step in the pipeline there is 'source'
         and 'target'}
       \end{enumerate}
@@ -80,7 +81,7 @@ signs from images.
 
 
 \pagebreak
-\section{Filter pipeline overview}
+\chapter{The filter pipeline}
 ...
 
 \begin{enumerate}
@@ -94,7 +95,6 @@ signs from images.
 \end{enumerate}
 
 
-\pagebreak
 \section{Binarization}
 
 The first step of the whole pipeline consists of extracting the red
@@ -138,6 +138,7 @@ course of a day. The drawback of this approach are more falsely marked
 areas of the image that have to be considered in all further steps.
 
 \begin{table}
+  \centering
   \begin{tabular}{c r r r r r}
 
     \textbf{Color} & \textbf{Red} & \textbf{Green} & \textbf{Blue} &
@@ -176,12 +177,11 @@ obscure its shape. As it is essential to expose the signs form for
 best detection, some morphological operations may be applied for noise
 removal.
 
-The system implements two optional steps with four morphological
-operations that are separately adjustable. The first step consists of
-dilation and erosion, which is called ``closing'', the second step of
-erosion and dilation, called ``opening''. This also means it is
-possible to first erode, then dilate (and optionally erode again). The
-purpose and functioning of these algorithms are described below.
+The system implements two morphological operations that are separately
+adjustable. These operations are called dilation and erosion. This is
+called ``closing'' when combined. The purpose and functioning of these
+algorithms are described below.
+
 
 \subsection{Erosion and Dilation}
 
@@ -276,12 +276,112 @@ that the form is not smoothed and the cut propagates to the target.
 
 
 \subsection{Opening and closing}
-...
+
+When erosion and dilation are combined they form an operation called
+opening. This is due to the fact that if any forms are connected by
+thinner areas this connection vanishes through erosion and the
+original forms size is restored by dilating again afterwards. The
+opposite effect occurs when first dilating and then eroding the
+image. Here, thin connections are strengthened and connections between
+forms may be established. This proves useful if a closed yield sign
+shapes are required even if somebody took a pencil and drew over the
+red area or light reflections break the red surface.
 
 
 \subsection{Application to the system}
 
-Iterations as free parameters.
+As stated before, closing is embedded to the system. Erosion nearly
+never proved useful however. Most of the time the already small red
+areas spanned by the yield signs are lost. This leads to never
+detecting any yield signs that are far away. The number of iterations
+are free parameters of the system and may be adjusted. Using one or
+two iterations of dilation and one or zero iterations of erosion work
+fairly well.
+
+{\color{red}{Picture examples}}
+
+
+\section{Component labeling}
+
+This optional step tries to greatly reduce the impact of red image
+areas that are not yield signs. The basic idea is that yield signs
+enclose a white triangle and thus there are black areas enclosed by
+closed white borders in the binary image. If all black areas are
+labeled, the label with the most associated pixels must be the
+background - assuming the yield sign is not the most prominent object
+captured. All forms that do not enclose any area vanish that way,
+greatly reducing the amount of considered objects. Because the
+algorithm is defined for labeling white areas, the source image needs
+to be inverted first.
+
+The algorithm works by iterating the image from top-left, selecting
+all white pixels and checking whether a new label needs to be
+introduced or - if the neighbors are already labeled adopt that label
+for the current pixel. Formally, given a mask \textit{M} and a set \(
+L = \{1, 2, ... \} \) of unassigned labels, the target pixels value is
+given by formula \ref{eq:label}. Because multiple values can be
+returned by \textit{M}, another set \textit{E} is needed to store all
+equivalents. After the first labeling step, the equivalents are
+resolved by assigning the smallest label of possible candidates. This
+algorithm is called two-pass algorithm and the form of \textit{L}
+checks for 8-connectivity as all eight neighboring pixels are taken
+into account.
+
+\begin{equation}
+  M = \begin{bmatrix}
+    source(y-1, x-1) & source(y-1, x) & source(y-1, x+1) \\
+    source(y, x-1)   & source(y, x)   & -
+  \end{bmatrix}
+\end{equation}
+
+
+\begin{equation}\label{eq:label}
+    target(y, x) =
+    \begin{cases}
+      min(L) \quad L = L \setminus l & \quad \text{if } \forall m \in M: m = 0 \\
+      any(C) \quad C = \{ c | \forall c \in M \} \quad E = E \cup \{(m, n)\} & \quad \text{else}
+    \end{cases}
+\end{equation}
+
+After labeling all distinct components of the image, the component
+with the largest amount of associated pixels is set to white and the
+image is again reversed. Although this step proves to be very
+effective it has one big drawback: As soon as the detected yield sign
+shape is not closed the whole detection system fails immediately. This
+does not happen otherwise as even without a closed form, the other
+edges are prominent enough to allow detection. Thus this step can be
+optionally enabled or disabled.
+
+{\color{red}{Picture examples}}
+
+
+\section{Edge Detection}
+{\color{red}{To be written}}
+
+
+\section{Line Detection}
+{\color{red}{To be written}}
+
+
+\section{Yield Sign Detection}
+{\color{red}{To be written}}
+
+
+\subsection{Finding points of intersection}
+
+
+
+
+\subsection{Determining Triangles}
+{\color{red}{To be written}}
+
+
+\subsection{Filtering Triangles for Yield Signs}
+{\color{red}{To be written}}
+
+
+\pagebreak
+\chapter{Evaluation and Conclusion}
 
 
 \end{document}
