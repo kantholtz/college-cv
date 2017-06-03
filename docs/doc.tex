@@ -63,10 +63,16 @@ signs from images.
 {\color{red}{
     \begin{enumerate}
     \item \textit{Notation definitions}
+      \begin{enumerate}
+      \item \textit{Always height x width}
+      \item \textit{For every step in the pipeline there is 'source'
+        and 'target'}
+      \end{enumerate}
     \item \textit{Image test set}
     \item \textit{Requirements}
       \begin{enumerate}
       \item \textit{Changing light (night, day, dawn, dusk)}
+      \item \textit{Image sizes}
       \item \textit{Performance}
       \end{enumerate}
     \end{enumerate}
@@ -112,8 +118,8 @@ written to the binarized image \textit{target} is:
     f(r, g, b) & = \alpha r - (g + b) \\
     target(y, x) & =
     \begin{cases}
-      255 & \quad \text{if } f(source(y, x)) > \delta \\
-      0   & \quad \text{else}
+      1 & \quad \text{if } f(source(y, x)) > \delta \\
+      0 & \quad \text{else}
     \end{cases}
   \end{split}
 \end{equation}
@@ -137,14 +143,14 @@ areas of the image that have to be considered in all further steps.
     \textbf{Color} & \textbf{Red} & \textbf{Green} & \textbf{Blue} &
     \textbf{\textit{f(r, g, b)}} & \textbf{\textit{target(y, x)}} \\ \hline
 
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_000000}} &   0 &   0 &   0 &    0 &   0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ffffff}} & 255 & 255 & 255 &  -51 &   0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_00ff00}} &   0 & 255 &   0 & -255 &   0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_0000ff}} &   0 &   0 & 255 & -255 &   0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0000}} & 255 &   0 &   0 &  459 & 255 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8888}} & 255 & 125 & 125 &  209 & 255 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8800}} & 255 & 125 &   0 &  334 & 255 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0088}} & 255 &   0 & 126 &  334 & 255
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_000000}} &   0 &   0 &   0 &    0 & 0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ffffff}} & 255 & 255 & 255 &  -51 & 0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_00ff00}} &   0 & 255 &   0 & -255 & 0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_0000ff}} &   0 &   0 & 255 & -255 & 0 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0000}} & 255 &   0 &   0 &  459 & 1 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8888}} & 255 & 125 & 125 &  209 & 1 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8800}} & 255 & 125 &   0 &  334 & 1 \\ \hline
+    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0088}} & 255 &   0 & 126 &  334 & 1
 
   \end{tabular}
   \caption{Example results of function \textit{f} in
@@ -153,11 +159,129 @@ areas of the image that have to be considered in all further steps.
   \label{table:binarization}
 \end{table}
 
-Performance is nice.
+{\color{red}{\textit{Performance, Pictures}}}
 
 
-\subsection{Foo}
+\section{Morphological operations}
 
-bar
+At this point of the pipeline, the \textit{source} image is a binary
+image with all areas considered red marked true. The quality of the
+image and found red areas depends greatly on a variety of factors. For
+one the camera itself might introduce pixel errors to the picture,
+resulting in falsely colored pixels (when the sensor is of inferior
+quality or getting old) or blacked out areas (e.g. when the lens is
+dirty). On the other hand the to-be-detected yield sign could be
+dirty, altered by vandalism or simply reflect light which would
+obscure its shape. As it is essential to expose the signs form for
+best detection, some morphological operations may be applied for noise
+removal.
+
+The system implements two optional steps with four morphological
+operations that are separately adjustable. The first step consists of
+dilation and erosion, which is called ``closing'', the second step of
+erosion and dilation, called ``opening''. This also means it is
+possible to first erode, then dilate (and optionally erode again). The
+purpose and functioning of these algorithms are described below.
+
+\subsection{Erosion and Dilation}
+
+Main purpose of erosion is to remove white noise from the binary
+image. For every pixel of the \textit{source} image, some range around
+the pixel is considered. This range - as used the current
+implementation - can be seen in \ref{eq:morph_mask} and is commonly
+called ``structuring element'' \textit{S}. Now, for every pixel in the
+\textit{source} image, the mask is applied and the target pixel is set
+based on \ref{eq:morph_erosion}. Commonly speaking, the target pixel
+is only set if all surrounding pixels masked by \textit{S} are also
+set.
+
+\begin{equation}\label{eq:morph_mask}
+  S = \begin{bmatrix}
+
+    -              & source(y-1, x) & -              \\
+    source(y, x-1) & source(y, x)   & source(y, x+1) \\
+    -              & source(y+1, x) & -
+
+  \end{bmatrix}
+\end{equation}
+
+\begin{equation}\label{eq:morph_erosion}
+  target(y, x) = 1 \iff \bigwedge_{s \in S} s \neq 0
+\end{equation}
+
+The functioning of the algorithm is depicted in
+\ref{eq:morph_erosion-example}. Closed white components shrink by the
+factor determined by the size of \textit{S}. Spurious grains of white
+are eliminated completely. Thus the erosion is used to remove white
+noise on black backgrounds such as the grain on the bottom right of
+the example.
+
+\begin{align}\label{eq:morph_erosion-example}
+  source = \begin{bmatrix}
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 0 & 0 & 0 & 0 & 1
+  \end{bmatrix}
+  & &
+  \mapsto
+  & &
+  target = \begin{bmatrix}
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 0 & 1 & 1 & 0 & 0 \\
+    0 & 0 & 1 & 1 & 0 & 0 \\
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 0 & 0 & 0 & 0 & 0
+  \end{bmatrix}
+\end{align}
+
+The dilation operation alters the image in such way that closed white
+forms expand by the factor determined by \textit{S}. Grains of black
+are removed from white backgrounds. The algorithm itself works
+analogous to the erosion algorithm but pixels in the target image are
+set if any of the masked source pixels is white. The equation changes
+accordingly and is defined in \ref{eq:morph_dilation}. An example is
+given in \ref{eq:morph_dilation-example}. It can be observed that the
+white form grows and the black grains inside that form vanish. Note
+that the form is not smoothed and the cut propagates to the target.
+
+\begin{equation}\label{eq:morph_dilation}
+  target(y, x) = 1 \iff \bigvee_{s \in S} s \neq 0
+\end{equation}
+
+\begin{align}\label{eq:morph_dilation-example}
+  source = \begin{bmatrix}
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 1 & 0 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0 \\
+    0 & 1 & 1 & 0 & 1 & 0
+  \end{bmatrix}
+  & &
+  \mapsto
+  & &
+  target = \begin{bmatrix}
+    0 & 0 & 0 & 0 & 0 & 0 \\
+    0 & 1 & 0 & 1 & 1 & 0 \\
+    1 & 1 & 1 & 1 & 1 & 1 \\
+    1 & 1 & 1 & 1 & 1 & 1 \\
+    1 & 1 & 1 & 1 & 1 & 1 \\
+    1 & 1 & 1 & 1 & 1 & 1
+  \end{bmatrix}
+\end{align}
+
+
+\subsection{Opening and closing}
+...
+
+
+\subsection{Application to the system}
+
+Iterations as free parameters.
+
 
 \end{document}
