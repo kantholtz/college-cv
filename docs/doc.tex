@@ -11,7 +11,7 @@
 
 % captions and figures
 \usepackage[font=small,labelfont=bf]{caption}
-\usepackage{graphicx, subcaption, subfig, float}
+\usepackage{graphicx, subcaption, float}
 \restylefloat{figure}
 
 \usepackage{wrapfig}
@@ -59,7 +59,7 @@
 
 This document describes the implementation of a system to detect yield
 signs from images. {\color{red}{To be written: Some general
-    introduction}}
+    introduction (problem description, scope, constraints, reason)}}
 
 \section{Requirements}
 
@@ -139,9 +139,26 @@ heuristics are applied to determine all relevant triangles and
 classify whether those triangles could be yield signs. A graphical
 depiction of this process is given in \ref{img:pipeline}.
 
+{\color{red}{To do: Apply a median filter before or after
+    segmentation?}}
 
-\section{Binarization}
+
+\section{Segmentation}
 \label{sec:pipeline_binarization}
+
+\begin{figure}
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/segmentation_source}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/segmentation_target}
+  \end{subfigure}
+  \caption{Color segmentation to create a binary image with red areas
+    marked true. The sign in the source image reflects a lot of
+    sunlight which lessens the saturation. Used parameters are \(
+    \alpha = 1.8, \delta = 0.3 * 255. \)}
+\end{figure}
 
 The first step of the whole pipeline consists of extracting the red
 color from the coloured input image \textit{source}. Thus a mapping
@@ -205,8 +222,6 @@ areas of the image that have to be considered in all further steps.
     the result is equivalent for light red, orange and magenta.}
   \label{table:binarization}
 \end{table}
-
-{\color{red}{\textit{To do: Example pictures}}}
 
 
 \section{Morphological operations}
@@ -305,8 +320,8 @@ that the form is not smoothed and the cut propagates to the target.
     0 & 0 & 0 & 0 & 0 & 0 \\
     0 & 1 & 0 & 1 & 1 & 0 \\
     0 & 1 & 1 & 1 & 1 & 0 \\
-    0 & 1 & 1 & 1 & 1 & 0 \\
-    0 & 1 & 1 & 0 & 1 & 0
+    0 & 1 & 1 & 0 & 1 & 0 \\
+    0 & 1 & 1 & 1 & 1 & 0
   \end{bmatrix}
   & &
   \mapsto
@@ -332,20 +347,38 @@ opposite effect occurs when first dilating and then eroding the
 image. Here, thin connections are strengthened and connections between
 forms may be established. This proves useful if a closed yield sign
 shapes are required even if somebody took a pencil and drew over the
-red area or light reflections break the red surface.
+red area or light reflections break the red surface. The number of
+iterations are free parameters of the system and may be
+adjusted. Introducing another erosion step to remove white noise
+mostly resulted in eroding the yield sign itself and is therefore no
+longer part of the pipeline.
 
-
-\subsection{Application to the system}
-
-As stated before, closing is embedded to the system. Erosion nearly
-never proved useful however. Most of the time the already small red
-areas spanned by the yield signs are lost. This leads to never
-detecting any yield signs that are far away. The number of iterations
-are free parameters of the system and may be adjusted. Using one or
-two iterations of dilation and one or zero iterations of erosion work
-fairly well.
-
-{\color{red}{To do: Example pictures}}
+\begin{figure}
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/closing_0}
+    \subcaption{Original image}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/closing_1}
+    \subcaption{Segmented image}
+  \end{subfigure}
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/closing_2}
+    \subcaption{After dilation}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/closing_3}
+    \subcaption{After erosion}
+    \label{subcap:erosion}
+  \end{subfigure}
+  \caption{Closing applied to an image with a vandalized yield
+    sign. Note how the form is closed in \ref{subcap:erosion} on the
+    left side. However, the number of iterations were not sufficient
+    to close the form completely. All noise is removed from the red
+    lights.}
+\end{figure}
 
 
 \section{Component labeling}
@@ -486,7 +519,7 @@ whether any \( i, j, k \) exists where a combination of intersections
 is transitive, meaning \( (i, j, p_0), (j, k, p_1), (i, k, p_2) \in T
 \). If the condition holds, than the three points \( p_0, p_1, p_2 \)
 are the vertices of a triangle and the tuple \( (i, min(j,k),
-max(j,k)) \) unambiguously identifies it. Now they are be filtered
+max(j,k)) \) unambiguously identifies it. Now they are filtered
 further by discarding all triangles whose ratio does not fit (yield
 signs are nearly equilateral, even when taking perspective into
 account). Also signs can be discarded whose total size exceeds or
@@ -500,23 +533,52 @@ mimicking the shape of a yield sign, and an equally sized image with a
 triangle having the shape of the detected one. Both images are binary
 images where the triangles are white. Let \( ref \) be the reference
 triangle image and \( tri \) the detected triangle, \( h \) the
-images' height and \( w \) the images' width, then the difference
-between the two is defined in \ref{eq:detect_patmatch}. The resulting
-real number \( \Delta \in [0, 1] \) expresses the similarity between
-the two and the larger that value gets the more different the
-triangles are. Whether the triangle is classified as a yield sign is
-controlled by a free parameter threshold. This threshold can be raised
-to detect yield signs that are distorted by perspective.
+reference images' height and \( w \) the reference images' width, then
+the difference between the two is defined in
+\ref{eq:detect_patmatch}. The resulting real number \( \Delta \in [0,
+  1] \) expresses the similarity between the two and the larger that
+value gets the more different the triangles are. Whether the triangle
+is classified as a yield sign is controlled by a free parameter
+threshold. This threshold can be raised to detect yield signs that are
+distorted by perspective.
 
 \begin{equation}\label{eq:detect_patmatch}
   \Delta = \frac{1}{h * w} \Bigg( \sum_{0 \leq y < h}\sum_{0 \leq x <w} ref(y, x) \oplus tri(y, x) \Bigg)
 \end{equation}
 
 
+\begin{figure}
+  \begin{subfigure}[t]{0.3\textwidth}
+    \includegraphics[width=1\textwidth]{src/patmatch_ref}
+    \subcaption{\centering The reference triangle}
+  \end{subfigure}
+  \qquad
+  \begin{subfigure}[t]{0.3\textwidth}
+    \includegraphics[width=1\textwidth]{src/patmatch_tri1}
+    \subcaption{\centering Most likely a yield sign with \( \Delta \approx 0.12 \)}
+  \end{subfigure}
+  \qquad
+  \begin{subfigure}[t]{0.3\textwidth}
+    \includegraphics[width=1\textwidth]{src/patmatch_tri2}
+    \subcaption{\centering This could be a warning sign with \( \Delta \approx 0.47 \)}
+  \end{subfigure}
+  \caption{Example results of equation \ref{eq:detect_patmatch}}
+\end{figure}
+
+
 \pagebreak
 \chapter{Evaluation and Conclusion}
 {\color{red}{To be written}}
 
+\section{Performance}
+{\color{red}{To be written}}
+
+\section{Application to Videos}
+{\color{red}{To be written (ROI, Frame-Skipping)}}
+
+\section{Prospect}
+{\color{red}{To be written (Other approaches: k-means clustering for
+    segmentation, Otsu? ...)}}
 
 
 \end{document}
