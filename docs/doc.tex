@@ -58,30 +58,47 @@
 \chapter{Introduction}
 
 This document describes the implementation of a system to detect yield
-signs from images.
+signs from images. {\color{red}{To be written: some introduction}}
 
-{\color{red}{
-    \begin{enumerate}
-    \item \textit{Notation definitions}
-      \begin{enumerate}
-      \item \textit{Always height x width}
-      \item \textit{For binary images: 1 corresponds to white}
-      \item \textit{For every step in the pipeline there is 'source'
-        and 'target'}
-      \end{enumerate}
-    \item \textit{Image test set}
-    \item \textit{Requirements}
-      \begin{enumerate}
-      \item \textit{Changing light (night, day, dawn, dusk)}
-      \item \textit{Image sizes}
-      \item \textit{Performance}
-      \end{enumerate}
-    \end{enumerate}
-}}
+\section{Requirements}
+
+The system should be able to detect yield signs from the perspective
+of a car participating in traffic. This means that the point of view
+is approximately between one and two meters from the ground on the
+right lane\footnote{Except for countries with left hand traffic that
+  are not considered here.} of a street. There are no hard
+requirements regarding size and quality of the images. For testing
+purposes both small images with inferior quality and high resolution
+images should be tested. This is necessary to make a prediction
+whether the system is suitable for real-time use in videos. Videos may
+be cropped and shrunk to fit these requirements. The detection should
+work with changing ambient light. Without white balancing, the
+standardized red color value of yield signs changes when captured by
+camera based on the daytime. The color also varies greatly when the
+sunlight is reflected on the sign.
+
+
+\section{Notation}
+
+All images are either two or three dimensional. Two dimensional images
+are either grayscale or binary images, three dimensional images are
+color images with three color components: red, green and blue (in this
+order). Origin of each image is the top left corner and iteration is
+row-major. This is reflected when addressing single pixel
+values. Given some image \( I \), then \( I(y, x) \) returns the pixel
+\( y \) in the images' vertical and \( x \) in the images' horizontal
+direction. Binary images are two dimensional and every value is in
+\(\{ 0, 1 \}\). Thus, boolean operations can be applied. Pixel values
+of 0 are called ``black'' or ``false'' and values of 1 are called
+``white'' or ``true''. Each step in the pipeline that is described in
+chapter \ref{chap:pipeline} has a \( source \) image which is the
+result of the previous step of the pipeline and a \( target \) image
+that is written to.
 
 
 \pagebreak
 \chapter{The filter pipeline}
+\label{chap:pipeline}
 ...
 
 \begin{enumerate}
@@ -350,18 +367,18 @@ image is again reversed. Although this step proves to be very
 effective it has one big drawback: As soon as the detected yield sign
 shape is not closed the whole detection system fails immediately. This
 does not happen otherwise as even without a closed form, the other
-edges are prominent enough to allow detection. Thus this step can be
-optionally enabled or disabled.
+edges are prominent enough to allow detection. Thus this step can
+optionally be enabled or disabled.
 
 {\color{red}{Picture examples}}
 
 
 \section{Edge Detection}
-{\color{red}{To be written}}
+{\color{red}{To be written: Either Dilation + XOR or Sobel for Fast Hough}}
 
 
 \section{Line Detection}
-{\color{red}{To be written}}
+{\color{red}{To be written: Either Hough or Fast Hough}}
 
 
 \section{Yield Sign Detection}
@@ -426,16 +443,34 @@ are the vertices of a triangle and the tuple \( (i, min(j,k),
 max(j,k)) \) unambiguously identifies it. Now they are be filtered
 further by discarding all triangles whose ratio does not fit (yield
 signs are nearly equilateral, even when taking perspective into
-account. Also signs can be discarded whose total size exceeds or
-undercuts some threshold. These threshold can be calculated based on
+account). Also signs can be discarded whose total size exceeds or
+undercuts some threshold. These thresholds can be calculated based on
 the images size.
 
-{\color{red}{Pattern matching}}
+The last step of detecting whether the found triangle actually
+corresponds to a yield sign consists of looking at the actual shape of
+the triangle itself. To do so, a reference triangle is created,
+mimicking the shape of a yield sign, and an equally sized image with a
+triangle having the shape of the detected one. Both images are binary
+images where the triangles are white. Let \( ref \) be the reference
+triangle image and \( tri \) the detected triangle, \( h \) the
+images' height and \( w \) the images' width, then the difference
+between the two is defined in \ref{eq:detect_patmatch}. The resulting
+real number expresses the similarity between the two and the larger
+that value gets the more different the triangles are. Whether the
+triangle is classified as a yield sign is controlled by a free
+parameter threshold. This threshold can be raised to detect yield
+signs that are distorted by perspective.
 
+\begin{equation}\label{eq:detect_patmatch}
+  \Delta = \frac{1}{h * w} \Bigg( \sum_{0 \leq y < h}\sum_{0 \leq x <w} ref(y, x) \oplus tri(y, x) \Bigg)
+\end{equation}
 
 
 \pagebreak
 \chapter{Evaluation and Conclusion}
+{\color{red}{To be written}}
+
 
 
 \end{document}
