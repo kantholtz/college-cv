@@ -9,9 +9,9 @@
 \usepackage[scaled=.95]{sourcecodepro}
 \linespread{1.3}
 
-% figures
-\usepackage{subfig}
-\usepackage{float}
+% captions and figures
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{graphicx, subcaption, subfig, float}
 \restylefloat{figure}
 
 \usepackage{wrapfig}
@@ -58,7 +58,8 @@
 \chapter{Introduction}
 
 This document describes the implementation of a system to detect yield
-signs from images. {\color{red}{To be written: some introduction}}
+signs from images. {\color{red}{To be written: Some general
+    introduction}}
 
 \section{Requirements}
 
@@ -95,24 +96,52 @@ chapter \ref{chap:pipeline} has a \( source \) image which is the
 result of the previous step of the pipeline and a \( target \) image
 that is written to.
 
+{\color{red}{To do: Nice picture of the final result}}
+
 
 \pagebreak
-\chapter{The filter pipeline}
+\chapter{The pipeline}
 \label{chap:pipeline}
-...
 
-\begin{enumerate}
-\item Binarization
+For yield sign detection a modular system of components is used. Each
+step of the pipeline takes at least the result of the previous step as
+input for processing. Simply put, color images are fed into the
+pipeline and a set of yield sign descriptions is returned. Each
+element of this set contains all three vertices and the center of the
+sign.
 
-  \begin{enumerate}
-  \item Red Amplification
-  \item Binarization
-  \end{enumerate}
+\begin{figure}
+  \centering
+    \includegraphics[width=1\textwidth]{src/pipeline}
+  \caption{A high level overview of the processing pipeline}
+  \label{img:pipeline}
+\end{figure}
 
-\end{enumerate}
+The pipeline itself consists of the following components: First the
+red color component of the image is extracted. A threshold is
+introduced to create a binary image masking all red areas. This is
+described in section \ref{sec:pipeline_binarization}. The next
+component applies morphological operations to enhance the quality of
+the extracted areas. A description of this can be found in section
+\ref{sec:pipeline_morph}. The following section
+\ref{sec:pipeline_complab} describes how the amount of relevant red
+areas can be greatly reduced by filling the ``background'' of the
+image utilizing component labeling. As this proved quite useful but
+hindered detection completely for some corner cases, this step can be
+enabled optionally. The now remaining relevant areas are transformed
+in such way that their shapes are defined by their edges
+{\color{red}{(either dilation + xor or sobel)}}. Section
+\ref{sec:pipeline_edgedet} describes this and the succeeding section
+\ref{sec:pipeline_linedet} explains how this information can be used
+to detect and extract lines from the image. After all lines are
+extracted section \ref{sec:pipeline_yielddet} discusses how some
+heuristics are applied to determine all relevant triangles and
+classify whether those triangles could be yield signs. A graphical
+depiction of this process is given in \ref{img:pipeline}.
 
 
 \section{Binarization}
+\label{sec:pipeline_binarization}
 
 The first step of the whole pipeline consists of extracting the red
 color from the coloured input image \textit{source}. Thus a mapping
@@ -177,11 +206,11 @@ areas of the image that have to be considered in all further steps.
   \label{table:binarization}
 \end{table}
 
-{\color{red}{\textit{Performance, Pictures}}}
+{\color{red}{\textit{To do: Example pictures}}}
 
 
 \section{Morphological operations}
-\label{sec:morph}
+\label{sec:pipeline_morph}
 
 At this point of the pipeline, the \textit{source} image is a binary
 image with all areas considered red marked true. The quality of the
@@ -316,10 +345,11 @@ are free parameters of the system and may be adjusted. Using one or
 two iterations of dilation and one or zero iterations of erosion work
 fairly well.
 
-{\color{red}{Picture examples}}
+{\color{red}{To do: Example pictures}}
 
 
 \section{Component labeling}
+\label{sec:pipeline_complab}
 
 This optional step tries to greatly reduce the impact of red image
 areas that are not yield signs. The basic idea is that yield signs
@@ -370,18 +400,21 @@ does not happen otherwise as even without a closed form, the other
 edges are prominent enough to allow detection. Thus this step can
 optionally be enabled or disabled.
 
-{\color{red}{Picture examples}}
+{\color{red}{To do: Example pictures}}
 
 
 \section{Edge Detection}
+\label{sec:pipeline_edgedet}
 {\color{red}{To be written: Either Dilation + XOR or Sobel for Fast Hough}}
 
 
 \section{Line Detection}
+\label{sec:pipeline_linedet}
 {\color{red}{To be written: Either Hough or Fast Hough}}
 
 
 \section{Yield Sign Detection}
+\label{sec:pipeline_yielddet}
 {\color{red}{To be written}}
 
 
@@ -422,15 +455,28 @@ of all intersections is \(\{ (y, x)_{i, j} | y = \frac{p_{i, j,
 p_{i, j, 2} \neq 0 \}\). Also, to keep all further computation small
 even if a lot of lines are found, the points of intersection are
 filtered by whether there is some red to be found nearby. To do so,
-the result of the morphological computations (section \ref{sec:morph})
-is consulted and the point of intersection is kept if any white pixel
-is found there. The points are further filtered by whether they are
-inside the image plus some boundary. Even for truncated signs the
+the result of the morphological computations (section
+\ref{sec:pipeline_morph}) is consulted and the point of intersection
+is kept if any white pixel is found there. An example of why this a
+useful step is given in figure \ref{img:red_detection} where a
+triangle is falsely classified as a yield sign although there is no
+sign remotely close. The points are further filtered by whether they
+are inside the image plus some boundary. Even for truncated signs the
 relevant point of intersection is near the image boundary. The
 parameters for controlling the size of both the lookup area and the
 image boundary are free parameters. The intersections are saved as an
 unambiguous mapping of \( T = min(i, j) \to max(i, j) \to (y, x)_{i,
   j} \).
+
+\begin{wrapfigure}{r}{0.6\textwidth}
+  \begin{center}
+    \includegraphics[width=0.58\textwidth]{src/red_detection}
+  \end{center}
+  \caption{An example where a triangle with the shape of a yield sign
+    is found if no prior filtering of intersections based on detected
+    red value is applied.}
+  \label{img:red_detection}
+\end{wrapfigure}
 
 
 \subsection{Determining Triangles and Yield Signs}
@@ -456,11 +502,11 @@ images where the triangles are white. Let \( ref \) be the reference
 triangle image and \( tri \) the detected triangle, \( h \) the
 images' height and \( w \) the images' width, then the difference
 between the two is defined in \ref{eq:detect_patmatch}. The resulting
-real number expresses the similarity between the two and the larger
-that value gets the more different the triangles are. Whether the
-triangle is classified as a yield sign is controlled by a free
-parameter threshold. This threshold can be raised to detect yield
-signs that are distorted by perspective.
+real number \( \Delta \in [0, 1] \) expresses the similarity between
+the two and the larger that value gets the more different the
+triangles are. Whether the triangle is classified as a yield sign is
+controlled by a free parameter threshold. This threshold can be raised
+to detect yield signs that are distorted by perspective.
 
 \begin{equation}\label{eq:detect_patmatch}
   \Delta = \frac{1}{h * w} \Bigg( \sum_{0 \leq y < h}\sum_{0 \leq x <w} ref(y, x) \oplus tri(y, x) \Bigg)
