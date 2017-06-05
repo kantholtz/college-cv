@@ -279,6 +279,15 @@ class Hough(Module):
         assert 0 < size
         self._red_detection = int(size)
 
+    @property
+    def patmatch_threshold(self) -> float:
+        return self._patmatch_threshold
+
+    @patmatch_threshold.setter
+    def patmatch_threshold(self, t: float):
+        assert 0 <= t and t <= 1
+        self._patmatch_threshold = t
+
     # ---
 
     @property
@@ -493,15 +502,16 @@ class Hough(Module):
         # everybody walk the pattern match
         d = np.sum(ref ^ tri) / ref.size
         log.debug('pattern matching delta: %f', d)
-        return d < .2
+        return d < self.patmatch_threshold
 
     def __init__(self, name: str):
         super().__init__(name)
 
         # defaults
         self.min_angle = 45
-        self.min_distance = 50
+        self.min_distance = 100
         self.red_detection = 15
+        self.patmatch_threshold = 0.2
 
     def execute(self) -> np.ndarray:
         self._src = self.pipeline[-1].arr

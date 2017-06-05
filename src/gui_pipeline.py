@@ -378,28 +378,35 @@ class Hough(Tab):
 
             tgt[rr, cc] = [255, 255, 255]
 
-    def _draw_target(self):
-        tgt = self._mod_hough.arr / 3
-        self._draw_lines(tgt)
-        self._draw_points(tgt)
-        return tgt
-
-    def _draw_result(self):
+    def _draw_triangles(self, tgt):
         mod = self._mod_hough
-        tgt = mod.arr / 5
-        h, w, _ = tgt.shape
-
         for (p0, p1, p2), (y, x) in mod.barycenter.items():
             pois = (p0, p1), (p0, p2), (p1, p2)
-            y, x = zip(*[mod.pois[a][b] for a, b in pois])
+            py, px = zip(*[mod.pois[a][b] for a, b in pois])
 
             rr, cc = skd.polygon_perimeter(
-                y + (y[0], ),
-                x + (x[0], ),
+                py + (py[0], ),
+                px + (px[0], ),
                 shape=tgt.shape)
 
             tgt[rr, cc] = [255, 255, 255]
 
+            r = (np.max(py) - np.min(py)) * 2
+            rr, cc, val = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+
+            tgt[rr, cc, 0] += val * 255
+            tgt[tgt > 255] = 255
+
+    def _draw_target(self):
+        tgt = self._mod_hough.arr / 3
+        self._draw_lines(tgt)
+        self._draw_points(tgt)
+        self._draw_triangles(tgt)
+        return tgt
+
+    def _draw_result(self):
+        tgt = self._mod_hough.arr / 5
+        self._draw_triangles(tgt)
         return tgt
 
     def _init_gui(self, arr: np.ndarray):
@@ -424,6 +431,11 @@ class Hough(Tab):
         fn = self._mod_proxy(self._mod_hough, 'red_detection')
         self._add_slider(layout, fn, 3, 50,
                          initial=init, label='Red detection area')
+
+        init = self._mod_hough.patmatch_threshold
+        fn = self._mod_proxy(self._mod_hough, 'patmatch_threshold')
+        self._add_slider(layout, fn, 0, 20, 20,
+                         initial=init, label='Pattern matching threshold')
 
         controls.addLayout(layout)
 
