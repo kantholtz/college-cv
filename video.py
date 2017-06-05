@@ -15,6 +15,7 @@ import argparse
 
 import numpy as np
 import skvideo.io as skvio
+import skimage.draw as skd
 
 
 from src import pipeline as pl
@@ -46,6 +47,8 @@ def save(fname: str, vid: np.ndarray):
 def start(vid: np.ndarray):
     log.info('initializing modules')
 
+    # preprocessing
+
     mod_binarize = pl.Binarize('binarize')
     mod_binarize.threshold = 90
     mod_binarize.reference_color = (150, 20, 20)
@@ -56,15 +59,51 @@ def start(vid: np.ndarray):
     mod_erode = pl.Erode('erode')
     mod_erode.iterations = 4
 
+    # edging
+
+    mod_fill = pl.Fill('fill')
+    mod_edger = pl.Edger('edger')
+
+    # detecting
+
+    mod_hough = pl.Hough('hough')
+
+    # start
+
     log.info('start processing')
     n, h, w, _ = vid.shape
     binary = np.zeros((n, h, w))
 
     done = tmeasure(log.info, 'took %sms')
     for frame in range(n):
+
         binary[frame] = mod_binarize.apply(vid[frame].astype(np.int64))
         binary[frame] = mod_dilate.apply(binary[frame])
         binary[frame] = mod_erode.apply(binary[frame])
+
+        binary[frame] = mod_fill.apply(binary[frame])
+        binary[frame] = mod_edger.apply(binary[frame])
+
+        vid[frame] = vid[frame] / 3
+
+        mod_hough.binarized = binary[frame]
+        mod_hough.apply(binary[frame])
+        for (p0, p1, p2), (y, x) in mod_hough.barycenter.items():
+            pois = (p0, p1), (p0, p2), (p1, p2)
+            py, px = zip(*[mod_hough.pois[a][b] for a, b in pois])
+
+            rr, cc = skd.polygon_perimeter(
+                py + (py[0], ),
+                px + (px[0], ),
+                shape=vid[frame].shape)
+
+            vid[frame, rr, cc] = [255, 255, 255]
+
+            r = (np.max(py) - np.min(py)) * 2
+            rr, cc = skd.circle_perimeter(
+                y, x, r, shape=vid[frame].shape)
+
+            vid[frame, rr, cc, 0] = 255
 
         sys.stdout.write('.')
         sys.stdout.flush()
@@ -72,7 +111,7 @@ def start(vid: np.ndarray):
     print('')
     done()
 
-    return binary
+    return vid
 
 
 #
