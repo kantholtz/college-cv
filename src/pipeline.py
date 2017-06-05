@@ -76,6 +76,9 @@ class Pipeline():
         executed()
 
 
+# ---
+
+
 class Module():
 
     @property
@@ -126,35 +129,41 @@ class Binarize(Module):
 
     @threshold.setter
     def threshold(self, threshold: float):
-        assert 0 <= threshold and threshold <= 1
+        assert 0 <= threshold and threshold <= 255
         self._threshold = threshold
 
     @property
-    def amplification(self):
-        return self._amplification
+    def reference_color(self) -> tuple:
+        return self._reference_color
 
-    @amplification.setter
-    def amplification(self, amplification: float):
-        assert 0 < amplification
-        self._amplification = amplification
+    @reference_color.setter
+    def reference_color(self, color: tuple):
+        self._reference_color = color
 
     def __init__(self, name: str):
         super().__init__(name)
-        self._threshold = 0.3
-        self._amplification = 1.8
+        self._threshold = 100
+        self._reference_color = [180, 20, 20]
 
     def execute(self) -> np.ndarray:
-        log.info('binarize: threshold=%f, amplification=%f',
-                 self.threshold, self.amplification)
+        log.info('binarize: threshold=%f, reference=%s',
+                 self.threshold, str(self.reference_color))
 
-        a = self.amplification
         src = self.pipeline[-1].arr.astype(np.int64)
-        tgt = (src[:, :, 0] * a) - (src[:, :, 1] + src[:, :, 2])
+        return self.apply(src)
 
-        e = 255 * self.threshold
-        tgt[tgt < e] = 0
-        tgt[tgt > e] = 255
+    def apply(self, src):
+        assert src.ndim == 3
 
+        try:
+            ref = self._reference_color_arr
+        except AttributeError:
+            ref = self._reference_color_arr = np.full(
+                src.shape, self.reference_color)
+
+        tgt = np.linalg.norm(src - ref, axis=2)
+        tgt[tgt >= self.threshold] = 0
+        tgt[tgt > 0] = 255
         return tgt
 
 
@@ -278,6 +287,15 @@ class Hough(Module):
     def red_detection(self, size: int):
         assert 0 < size
         self._red_detection = int(size)
+
+    @property
+    def patmatch_threshold(self) -> float:
+        return self._patmatch_threshold
+
+    @patmatch_threshold.setter
+    def patmatch_threshold(self, t: float):
+        assert 0 <= t and t <= 1
+        self._patmatch_threshold = t
 
     # ---
 
@@ -493,15 +511,16 @@ class Hough(Module):
         # everybody walk the pattern match
         d = np.sum(ref ^ tri) / ref.size
         log.debug('pattern matching delta: %f', d)
-        return d < .2
+        return d < self.patmatch_threshold
 
     def __init__(self, name: str):
         super().__init__(name)
 
         # defaults
         self.min_angle = 45
-        self.min_distance = 50
+        self.min_distance = 100
         self.red_detection = 15
+        self.patmatch_threshold = 0.2
 
     def execute(self) -> np.ndarray:
         self._src = self.pipeline[-1].arr
