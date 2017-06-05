@@ -464,6 +464,11 @@ class ImageModule(qtw.QWidget):
 
         return view
 
+    def remove_view(self, view):
+        self.views.remove(view)
+        view.deleteLater()
+        self.update()
+
     # alter canvas
 
     def zoom(self, factor):

@@ -37,8 +37,14 @@ class Pipeline():
 
         return self
 
+    def __sub__(self, mod):
+        self._module_names.remove(mod.name)
+        del self._modules[mod.name]
+
     def _run(self, name: str) -> None:
         mod = self._modules[name]
+        if mod.disabled:
+            return
 
         mod.arr = mod.execute()
         assert mod.arr is not None
@@ -93,9 +99,18 @@ class Module():
         assert 0 <= np.amin(arr) and np.amax(arr) <= 255
         self._arr = arr
 
+    @property
+    def disabled(self) -> bool:
+        return self._disabled
+
+    @disabled.setter
+    def disabled(self, state: bool):
+        self._disabled = state
+
     def __init__(self, name: str):
         assert type(name) is str
         self._name = name
+        self._disabled = False
 
     def execute(self) -> None:
         raise NotImplementedError
@@ -325,7 +340,7 @@ class Hough(Module):
               (int -> int -> tuple(3))
 
         """
-        binarized = self.pipeline['edge_dilate'].arr
+        binarized = self.pipeline['pre_dilate'].arr
         off = self.red_detection // 2
 
         for i, j, coords in self._iter_intersections(h_coords):
@@ -441,7 +456,7 @@ class Hough(Module):
             img_h, img_w = self._src.shape
 
             # abort if the sign size does not fit
-            if img_h/2 < h or h < 20 or img_w/2 < w or w < 20:
+            if img_h/2 < h or h < 10 or img_w/2 < w or w < 10:
                 log.debug('discarding %s %dx%d sized triangle', key, h, w)
                 continue
 
@@ -485,14 +500,16 @@ class Hough(Module):
         done()
 
         # everybody walk the pattern match
-        return np.sum(ref - tri) / ref.size < .2  # 90%
+        d = np.sum(ref ^ tri) / ref.size
+        log.debug('pattern matching delta: %f', d)
+        return d < .2
 
     def __init__(self, name: str):
         super().__init__(name)
 
         # defaults
         self.min_angle = 45
-        self.min_distance = 100
+        self.min_distance = 50
         self.red_detection = 15
 
     def execute(self) -> np.ndarray:

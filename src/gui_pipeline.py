@@ -255,51 +255,64 @@ class Preprocessing(Tab):
 
 class EdgeDetection(Tab):
 
+    @property
+    def fill(self) -> bool:
+        return self._fill
+
+    def _toggle_fill(self):
+        self._fill = self._fill_button.isChecked()
+
+        if self.fill:
+            self._mod_fill.disabled = False
+            self._view_right = self._widget.add_view(
+                self._mod_fill.arr, stats_right=None)
+
+        else:
+            self._mod_fill.disabled = True
+            self._widget.remove_view(self._view_right)
+            self._view_right.deleteLater()
+            self.update()
+
+        self.ping()
+
     def _init_gui(self):
-        self._widget = gui_image.ImageModule(self._mod_erode.arr)
+        edge_arr = self._mod_edger.arr
+        l_arr = self._mod_fill.arr if self.fill else edge_arr
+        self._widget = gui_image.ImageModule(l_arr)
 
-        self._view_dilate = self.widget.add_view(
-            self._mod_dilate.arr, stats_right=None)
-
-        self._view_edger = self.widget.add_view(
-            self._mod_edger.arr, stats_right=None)
+        if self.fill:
+            self._view_right = self._widget.add_view(
+                edge_arr, stats_right=None)
 
         # ---
 
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
-        init = self._mod_erode.iterations
-        fn = self._mod_proxy(self._mod_erode, 'iterations')
-        self._add_slider(layout, fn, 0, 10,
-                         initial=init, label='Erosion iterations')
-
-        init = self._mod_dilate.iterations
-        fn = self._mod_proxy(self._mod_dilate, 'iterations')
-        self._add_slider(layout, fn, 0, 10,
-                         initial=init, label='Dilation iterations')
+        btn = self._fill_button = qtw.QRadioButton('Fill')
+        btn.setChecked(True)
+        btn.toggled.connect(self._toggle_fill)
+        layout.addWidget(btn)
 
         controls.addLayout(layout)
 
     def __init__(self):
         super().__init__('Edge Exposure')
+        self._fill = True
 
-        self._mod_erode = pl.Erode('edge_erode')
-        self._mod_dilate = pl.Dilate('edge_dilate')
+        self._mod_fill = pl.Fill('edge_fill')
         self._mod_edger = pl.Edger('edge_edger')
 
-        self._mod_erode.iterations = 0
-        self._mod_dilate.iterations = 2
-
-        self + self._mod_erode
-        self + self._mod_dilate
+        self + self._mod_fill
         self + self._mod_edger
 
     def update(self):
         try:
-            self.widget.view.image.arr = self._mod_erode.arr
-            self._view_dilate.image.arr = self._mod_dilate.arr
-            self._view_edger.image.arr = self._mod_edger.arr
+            if self.fill:
+                self.widget.view.image.arr = self._mod_fill.arr
+                self._view_right.image.arr = self._mod_edger.arr
+            else:
+                self.widget.view.image.arr = self._mod_edger.arr
 
         except AttributeError:
             self._init_gui()
