@@ -47,16 +47,25 @@ def start(vid: np.ndarray):
     log.info('initializing modules')
 
     mod_binarize = pl.Binarize('binarize')
-    mod_binarize.threshold = 120
+    mod_binarize.threshold = 90
+    mod_binarize.reference_color = (150, 20, 20)
+
+    mod_dilate = pl.Dilate('dilate')
+    mod_dilate.iterations = 4
+
+    mod_erode = pl.Erode('erode')
+    mod_erode.iterations = 4
 
     log.info('start processing')
     n, h, w, _ = vid.shape
-
     binary = np.zeros((n, h, w))
 
     done = tmeasure(log.info, 'took %sms')
     for frame in range(n):
         binary[frame] = mod_binarize.apply(vid[frame].astype(np.int64))
+        binary[frame] = mod_dilate.apply(binary[frame])
+        binary[frame] = mod_erode.apply(binary[frame])
+
         sys.stdout.write('.')
         sys.stdout.flush()
 

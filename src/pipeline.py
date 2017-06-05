@@ -191,12 +191,14 @@ class Dilate(Morph):
         log.info('dilate with %d iterations', self.iterations)
 
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         if self.iterations == 0:
             return src
 
         tgt = np.zeros(src.shape)
         tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
-
         return tgt
 
 
@@ -209,6 +211,9 @@ class Erode(Morph):
         log.info('erode with %d iterations', self.iterations)
 
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         if self.iterations == 0:
             return src
 
