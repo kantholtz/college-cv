@@ -210,14 +210,9 @@ class Preprocessing(Tab):
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
-        init = self._mod_binarize.amplification
-        fn = self._mod_proxy(self._mod_binarize, 'amplification')
-        self._add_slider(layout, fn, 5, 15, 5,
-                         initial=init, label='Red amplification')
-
         init = self._mod_binarize.threshold
         fn = self._mod_proxy(self._mod_binarize, 'threshold')
-        self._add_slider(layout, fn, 1, 100, 100,
+        self._add_slider(layout, fn, 0, 255,
                          initial=init, label='Binarization δ')
 
         init = self._mod_dilate.iterations
