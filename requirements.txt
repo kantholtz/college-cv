@@ -2,6 +2,8 @@ pyqt5
 scipy
 pillow
 scikit-image
+sk-video
+
 qimage2ndarray
 
 pylint
