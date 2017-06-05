@@ -404,16 +404,7 @@ class Hough(Module):
             # sum of all vertices and divide them by
             # their amount (always 3 in this case)
             center = np.array([np.sum(z) // 3 for z in zip(*points)])
-
-            # TODO may be removed
-            # calculate an estimation for the radius
-            r = 0
-            for p in points:
-                d = np.linalg.norm(center - np.array(p))
-                if d > r:
-                    r = int(d * 1.1)
-
-            triangles[key] = tuple(center) + (r, )
+            triangles[key] = tuple(center)
 
         # finally, filter found triangles
         log.info('found %d triangles', len(triangles))

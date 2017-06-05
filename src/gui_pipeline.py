@@ -378,16 +378,6 @@ class Hough(Tab):
 
             tgt[rr, cc] = [255, 255, 255]
 
-        # barycenters
-        for y, x, r in mod.barycenter.values():
-            rr, cc = skd.circle(y, x, 2)
-            tgt[rr, cc] = [0, 255, 0]
-
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-
-            tgt[tgt > 255] = 255
-
     def _draw_target(self):
         tgt = self._mod_hough.arr / 3
         self._draw_lines(tgt)
@@ -395,21 +385,20 @@ class Hough(Tab):
         return tgt
 
     def _draw_result(self):
-        fac = 5
         mod = self._mod_hough
-        tgt = mod.arr / fac
+        tgt = mod.arr / 5
         h, w, _ = tgt.shape
 
-        barycenter = mod.barycenter.values()
-        for y, x, r in barycenter:
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-            tgt[rr, cc, 1] += vv * 255
-            tgt[rr, cc, 2] += vv * 255
-            tgt[tgt > 255] = 255
+        for (p0, p1, p2), (y, x) in mod.barycenter.items():
+            pois = (p0, p1), (p0, p2), (p1, p2)
+            y, x = zip(*[mod.pois[a][b] for a, b in pois])
 
-            rr, cc = skd.circle(y, x, r, shape=tgt.shape)
-            tgt[rr, cc] *= fac
+            rr, cc = skd.polygon_perimeter(
+                y + (y[0], ),
+                x + (x[0], ),
+                shape=tgt.shape)
+
+            tgt[rr, cc] = [255, 255, 255]
 
         return tgt
 
