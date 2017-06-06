@@ -22,7 +22,6 @@ from tqdm import tqdm
 from src import video
 from src import logger
 from src import tmeasure
-from src import pipeline as pl
 
 # ---
 
@@ -50,44 +49,6 @@ def load(fname: str) -> np.ndarray:
 def save(fname: str, vid: np.ndarray):
     log.info('saving to %s', fname)
     skvio.vwrite(fname, vid)
-
-
-def _initialize(config):
-    if config is None:
-        config = {
-            'ReferenceColor': '200, 20, 20',
-            'Dilate': '3',
-            'Erode': '3'}
-    else:
-        config = config['options']
-
-    # step I : preprocessing
-    mod_binarize = pl.Binarize('binarize')
-    mod_binarize.threshold = 50
-
-    clr = config['ReferenceColor'].split(',')
-    mod_binarize.reference_color = tuple(map(int, clr))
-
-    mod_dilate = pl.Dilate('dilate')
-    mod_dilate.iterations = int(config['Dilate'])
-
-    mod_erode = pl.Erode('erode')
-    mod_erode.iterations = int(config['Erode'])
-
-    def segments(src: np.ndarray) -> np.ndarray:
-        return mod_erode.apply(mod_dilate.apply(mod_binarize.apply(src)))
-
-    # step II : edge detection
-    mod_fill = pl.Fill('fill')
-    mod_edger = pl.Edger('edger')
-
-    def edges(src: np.ndarray) -> np.ndarray:
-        return mod_edger.apply(mod_fill.apply(src))
-
-    # step III : line and sign detection
-    mod_hough = pl.Hough('hough')
-
-    return segments, edges, mod_hough
 
 
 def _draw_indicator(frame, y, x, vy, vx):
@@ -141,14 +102,14 @@ def _calc_roi(h, w, vy, vx):
     return (ry_min, ry_max), (rx_min, rx_max)
 
 
-def _indicate(buf, frame, mod_hough, off_y, off_x):
+def _indicate(buf, frame, barycenters, pois, off_y, off_x):
     rois = []
 
     _, w, h, _ = buf.original.shape
 
-    for (p0, p1, p2), (y, x) in mod_hough.barycenter.items():
-        pois = (p0, p1), (p0, p2), (p1, p2)
-        vy, vx = zip(*[mod_hough.pois[a][b] for a, b in pois])
+    for (p0, p1, p2), (y, x) in barycenters:
+        vertices = (p0, p1), (p0, p2), (p1, p2)
+        vy, vx = zip(*[pois[a][b] for a, b in vertices])
 
         vy = tuple(map(lambda y: off_y + y, vy))
         vx = tuple(map(lambda x: off_x + x, vx))
@@ -163,22 +124,20 @@ def _indicate(buf, frame, mod_hough, off_y, off_x):
 
 
 def _process(buf, frame, i, pipe, workload):
-    fn_segments, fn_edges, mod_hough = pipe
     binary, edges = workload
 
-    buf.binary[i] = fn_segments(frame.astype(np.int64))
+    buf.binary[i] = pipe.binarize(frame.astype(np.int64))
     if binary and not edges:
         return []
 
-    buf.edges[i] = fn_edges(buf.binary[i])
+    buf.edges[i] = pipe.edge(buf.binary[i])
     if edges:
         return []
 
     frame //= 3
 
-    mod_hough.binarized = buf.binary[i]
-    mod_hough.apply(buf.edges[i])
-    return _indicate(buf, frame, mod_hough, 0, 0)
+    barycenters, pois = pipe.detect(buf.edges[i], buf.binary[i])
+    return _indicate(buf, frame, barycenters, pois, 0, 0)
 
 
 def process(vid: np.ndarray, config=None, binary=False, edges=False):
@@ -186,12 +145,12 @@ def process(vid: np.ndarray, config=None, binary=False, edges=False):
     if edges:
         binary = True
 
-    fn_segments, fn_edges, mod_hough = _initialize(config)
+    pipe = video.Pipeline(config)
+    buf = video.Buffer(vid)
 
     log.info('start processing')
 
     n, w, h, _ = vid.shape
-    buf = video.Buffer(vid)
     rois = []
 
     print('')
@@ -201,11 +160,7 @@ def process(vid: np.ndarray, config=None, binary=False, edges=False):
         if len(rois) == 0:
             rois = [(0, w-1), (0, h-1)]
 
-        # TODO refactor
-        rois = _process(
-            buf, frame, i,
-            (fn_segments, fn_edges, mod_hough),
-            (binary, edges))
+        rois = _process(buf, frame, i, pipe, (binary, edges))
 
     print('')
     done()
