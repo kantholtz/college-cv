@@ -11,20 +11,28 @@ so you need to split the file or else it starts swapping ;)
 
 import sys
 import argparse
-
+import configparser
 
 import numpy as np
 import skvideo.io as skvio
 import skimage.draw as skd
+from tqdm import tqdm
 
 
 from src import pipeline as pl
 from src import logger
 from src import tmeasure
-log = logger(name=__name__[2:-2])
 
 
 # ---
+
+
+log = logger(name=__name__[2:-2])
+cfg = configparser.ConfigParser()
+
+
+# ---
+
 
 def load(fname: str) -> np.ndarray:
     vid = skvio.vread(fname)
@@ -44,74 +52,104 @@ def save(fname: str, vid: np.ndarray):
     skvio.vwrite(fname, vid)
 
 
-def start(vid: np.ndarray):
-    log.info('initializing modules')
+def _initialize(config):
+    if config is None:
+        config = {
+            'ReferenceColor': '200, 20, 20',
+            'Dilate': '3',
+            'Erode': '3'}
+    else:
+        config = config['options']
 
-    # preprocessing
-
+    # step I : preprocessing
     mod_binarize = pl.Binarize('binarize')
-    mod_binarize.threshold = 90
-    mod_binarize.reference_color = (150, 20, 20)
+    mod_binarize.threshold = 50
+
+    clr = config['ReferenceColor'].split(',')
+    mod_binarize.reference_color = tuple(map(int, clr))
 
     mod_dilate = pl.Dilate('dilate')
-    mod_dilate.iterations = 4
+    mod_dilate.iterations = int(config['Dilate'])
 
     mod_erode = pl.Erode('erode')
-    mod_erode.iterations = 4
+    mod_erode.iterations = int(config['Erode'])
 
-    # edging
+    def segments(src: np.ndarray) -> np.ndarray:
+        return mod_erode.apply(mod_dilate.apply(mod_binarize.apply(src)))
 
+    # step II : edge detection
     mod_fill = pl.Fill('fill')
     mod_edger = pl.Edger('edger')
 
-    # detecting
+    def edges(src: np.ndarray) -> np.ndarray:
+        return mod_edger.apply(mod_fill.apply(src))
 
+    # step III : line and sign detection
     mod_hough = pl.Hough('hough')
+
+    return segments, edges, mod_hough
+
+
+def _draw_indicator(vid, frame, mod_hough):
+    for (p0, p1, p2), (y, x) in mod_hough.barycenter.items():
+        pois = (p0, p1), (p0, p2), (p1, p2)
+        py, px = zip(*[mod_hough.pois[a][b] for a, b in pois])
+
+        rr, cc = skd.polygon_perimeter(
+            py + (py[0], ),
+            px + (px[0], ),
+            shape=vid[frame].shape)
+
+        vid[frame, rr, cc] = [255, 255, 255]
+
+        r = (np.max(py) - np.min(py)) * 2
+        rr, cc = skd.circle_perimeter(
+            y, x, r, shape=vid[frame].shape)
+
+        vid[frame, rr, cc, 0] = 255
+
+
+def process(vid: np.ndarray, config=None, binary=False, edges=False):
+    log.info('initializing modules')
+    if edges:
+        binary = True
+
+    fn_segments, fn_edges, mod_hough = _initialize(config)
 
     # start
 
     log.info('start processing')
     n, h, w, _ = vid.shape
-    binary = np.zeros((n, h, w))
+    vid_binary = np.zeros((n, h, w))
+    vid_edges = np.zeros((n, h, w))
 
+    print('')
     done = tmeasure(log.info, 'took %sms')
-    for frame in range(n):
+    for frame in tqdm(range(n)):
 
-        binary[frame] = mod_binarize.apply(vid[frame].astype(np.int64))
-        binary[frame] = mod_dilate.apply(binary[frame])
-        binary[frame] = mod_erode.apply(binary[frame])
+        vid_binary[frame] = fn_segments(vid[frame].astype(np.int64))
+        if binary and not edges:
+            continue
 
-        binary[frame] = mod_fill.apply(binary[frame])
-        binary[frame] = mod_edger.apply(binary[frame])
+        vid_edges[frame] = fn_edges(vid_binary[frame])
+        if edges:
+            continue
 
         vid[frame] = vid[frame] / 3
 
-        mod_hough.binarized = binary[frame]
-        mod_hough.apply(binary[frame])
-        for (p0, p1, p2), (y, x) in mod_hough.barycenter.items():
-            pois = (p0, p1), (p0, p2), (p1, p2)
-            py, px = zip(*[mod_hough.pois[a][b] for a, b in pois])
-
-            rr, cc = skd.polygon_perimeter(
-                py + (py[0], ),
-                px + (px[0], ),
-                shape=vid[frame].shape)
-
-            vid[frame, rr, cc] = [255, 255, 255]
-
-            r = (np.max(py) - np.min(py)) * 2
-            rr, cc = skd.circle_perimeter(
-                y, x, r, shape=vid[frame].shape)
-
-            vid[frame, rr, cc, 0] = 255
-
-        sys.stdout.write('.')
-        sys.stdout.flush()
+        mod_hough.binarized = vid_binary[frame]
+        mod_hough.apply(vid_edges[frame])
+        _draw_indicator(vid, frame, mod_hough)
 
     print('')
     done()
 
-    return vid
+    if edges:
+        return vid_edges
+    elif binary:
+        return vid_binary
+    else:
+        return vid
 
 
 #
@@ -130,12 +168,45 @@ def parse_args():
         'f_out', type=str,
         help='output file')
 
-    return parser.parse_args()
+    parser.add_argument(
+        '--config', type=str, nargs=1,
+        help='configuration file')
+
+    parser.add_argument(
+        '--binary',
+        action='store_true',
+        help='only apply segmentation and morphology')
+
+    parser.add_argument(
+        '--edges',
+        action='store_true',
+        help='only apply --binary and edge detection')
+
+    args = parser.parse_args()
+
+    if args.binary and args.edges:
+        print('either provide --edges or --binary')
+        parser.print_help()
+        sys.exit(2)
+
+    return args
 
 
 def main(args):
     log.info('starting the application')
-    save(args.f_out, start(load(args.f_in)))
+
+    if len(args.config) > 0:
+        cfg.read(args.config[0])
+        if 'options' not in cfg:
+            print('You need to provide an [option] section')
+            sys.exit(2)
+
+    result = process(load(args.f_in),
+                     config=cfg if args.config else None,
+                     binary=args.binary,
+                     edges=args.edges)
+
+    save(args.f_out, result)
 
 
 if __name__ == '__main__':

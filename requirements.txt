@@ -1,3 +1,4 @@
+tqdm
 pyqt5
 scipy
 pillow
