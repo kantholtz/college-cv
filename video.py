@@ -53,19 +53,13 @@ def save(fname: str, vid: np.ndarray):
     skvio.vwrite(fname, vid)
 
 
-def _draw_indicator(frame, y, x, vy, vx):
+def _draw_vertices(frame, y, x, vy, vx):
     rr, cc = skd.polygon_perimeter(
         vy + (vy[0], ),
         vx + (vx[0], ),
         shape=frame.shape)
 
-    frame[rr, cc] = [255, 255, 255]
-
-    r = (np.max(vy) - np.min(vy)) * 2
-    rr, cc = skd.circle_perimeter(
-        y, x, r, shape=frame.shape)
-
-    frame[rr, cc, 0] = 255
+    frame[rr, cc] = [255, 0, 0]
 
 
 def _draw_roi(arr, i, roi, val):
@@ -82,6 +76,8 @@ def _draw_roi(arr, i, roi, val):
     # color indicator for life decay
     rr, cc = skd.circle(y0, x0, 5)
     arr[i, rr, cc] = val * (roi.health / ROI_LIFESPAN)
+    rr, cc = skd.circle_perimeter(y0, x0, 5)
+    arr[i, rr, cc] = val
 
 
 def _get_vertices(keys, pois):
@@ -97,23 +93,31 @@ def _find_rois(buf, frame, barycenters, pois):
 
     for keys, (y, x) in barycenters:
         vy, vx = _get_vertices(keys, pois)
-        _draw_indicator(frame, y, x, vy, vx)
-        rois.append(video.ROI(w, h, vy, vx, ROI_LIFESPAN))
+        rois.append(video.ROI(w, h, y, x, vy, vx, ROI_LIFESPAN))
 
     return rois
 
 
-def _scan_full(buf, frame, i, pipe):
-    buf.binary[i] = pipe.binarize(frame.astype(np.int64))
+def _scan_full(buf, frame, i, pipe, draw=True):
+    segments = pipe.binarize(frame.astype(np.int64))
+
+    if draw:
+        buf.binary[i] = segments
     if pipe.binary and not pipe.edges:
         return []
 
-    buf.edges[i] = pipe.edge(buf.binary[i])
+    edges = pipe.edge(segments)
+
+    if draw:
+        buf.edges[i] = edges
+
     if pipe.edges:
         return []
 
-    barycenters, pois = pipe.detect(buf.edges[i], buf.binary[i])
-    return _find_rois(buf, frame, barycenters, pois)
+    barycenters, pois = pipe.detect(edges, segments)
+    rois = _find_rois(buf, frame, barycenters, pois)
+
+    return rois
 
 
 def _scan_roi(buf, frame, i, pipe, roi):
@@ -134,43 +138,41 @@ def _scan_roi(buf, frame, i, pipe, roi):
         buf.binary[i, r0:r1, c0:c1])
 
 
+def _merge_rois(w, h, roi, barycenter, pois, new_rois):
+    keys, (y, x) = barycenter
+    vy, vx = _get_vertices(keys, pois)
+    vy = tuple(map(lambda y: roi.r0 + y, vy))
+    vx = tuple(map(lambda x: roi.c0 + x, vx))
+
+    new_roi = video.ROI(w, h, y, x, vy, vx, ROI_LIFESPAN)
+    if not any([new_roi.intersects(r) for r in new_rois]):
+        new_rois.append(new_roi)
+
+
 def _process(buf, frame, i, pipe, rois):
     _, w, h, _ = buf.original.shape
-
-    # buf.original[i] //= 3
     new_rois = []
 
     # full scan
-    if i % 15 == 0 or len(rois) == 0:
-        new_rois += _scan_full(buf, frame, i, pipe)
+    rescan = i % 15 == 0
+    if rescan or len(rois) == 0:
+        new_rois += _scan_full(buf, frame, i, pipe, draw=(not rescan))
 
     # roi scan
     for roi in rois:
         barycenters, pois = _scan_roi(buf, frame, i, pipe, roi)
-
-        # from skimage.io import imsave
-        # imsave('original.png', buf.original[i, r0:r1, c0:c1])
-        # imsave('binary.png', buf.binary[i, r0:r1, c0:c1])
-        # imsave('edges.png', buf.edges[i, r0:r1, c0:c1])
-
-        # print('\nabort!')
-        # sys.exit(2)
-
         if len(barycenters) > 0:
-            keys, (y, x) = list(barycenters)[0]
-            vy, vx = _get_vertices(keys, pois)
-            vy = tuple(map(lambda y: roi.r0 + y, vy))
-            vx = tuple(map(lambda x: roi.c0 + x, vx))
-
-            new_roi = video.ROI(w, h, vy, vx, ROI_LIFESPAN)
-            if not any([new_roi.intersects(r) for r in new_rois]):
-                _draw_indicator(frame, roi.r0+y, roi.c0+x, vy, vx)
-                new_rois.append(new_roi)
-
+            _merge_rois(w, h, roi, list(barycenters)[0], pois, new_rois)
         else:
             if not roi.dead:
                 roi.punish()
                 new_rois.append(roi)
+
+    # nice drawings...
+    frame //= 3
+    for roi in new_rois:
+        _draw_vertices(frame, roi.r0+roi.y, roi.c0+roi.x, roi.vy, roi.vx)
+        _draw_roi(buf.original, i, roi, np.array([255, 255, 255]))
 
     return new_rois
 

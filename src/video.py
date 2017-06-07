@@ -104,6 +104,14 @@ class Pipeline():
 class ROI():
 
     @property
+    def y(self) -> int:
+        return self._y
+
+    @property
+    def x(self) -> int:
+        return self._x
+
+    @property
     def r0(self) -> int:
         return self._r0
 
@@ -138,9 +146,12 @@ class ROI():
     # ---
 
     def __init__(self,
-                 h: int, w: int,              # source dimension
-                 vy: np.array, vx: np.array,  # vertices
-                 lifespan: int):              # for life decay
+                 h: int, w: int, y: int, x: int,  # source dims & barycenter
+                 vy: np.array, vx: np.array,      # vertices
+                 lifespan: int):                  # for life decay
+
+        self._y = y
+        self._x = x
 
         self._vy = vy
         self._vx = vx
