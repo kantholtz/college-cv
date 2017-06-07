@@ -53,13 +53,13 @@ def save(fname: str, vid: np.ndarray):
     skvio.vwrite(fname, vid)
 
 
-def _draw_vertices(frame, y, x, vy, vx):
+def _draw_vertices(frame, roi):
     rr, cc = skd.polygon_perimeter(
-        vy + (vy[0], ),
-        vx + (vx[0], ),
+        roi.vy + (roi.vy[0], ),
+        roi.vx + (roi.vx[0], ),
         shape=frame.shape)
 
-    frame[rr, cc] = [255, 0, 0]
+    frame[rr, cc] = [int(255 * roi.health / ROI_LIFESPAN), 0, 0]
 
 
 def _draw_roi(arr, i, roi, val):
@@ -155,8 +155,10 @@ def _process(buf, frame, i, pipe, rois):
 
     # full scan
     rescan = i % 15 == 0
-    if rescan or len(rois) == 0:
-        new_rois += _scan_full(buf, frame, i, pipe, draw=(not rescan))
+    no_rois = len(rois) == 0
+    if rescan or no_rois:
+        draw = not rescan and no_rois
+        new_rois += _scan_full(buf, frame, i, pipe, draw=draw)
 
     # roi scan
     for roi in rois:
@@ -171,7 +173,7 @@ def _process(buf, frame, i, pipe, rois):
     # nice drawings...
     frame //= 3
     for roi in new_rois:
-        _draw_vertices(frame, roi.r0+roi.y, roi.c0+roi.x, roi.vy, roi.vx)
+        _draw_vertices(frame, roi)
         _draw_roi(buf.original, i, roi, np.array([255, 255, 255]))
 
     return new_rois
