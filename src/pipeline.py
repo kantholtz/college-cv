@@ -155,16 +155,13 @@ class Binarize(Module):
     def apply(self, src):
         assert src.ndim == 3
 
-        try:
-            ref = self._reference_color_arr
-        except AttributeError:
-            ref = self._reference_color_arr = np.full(
-                src.shape, self.reference_color)
+        ref = self._reference_color_arr = np.full(
+            src.shape, self.reference_color)
 
         tgt = np.linalg.norm(src - ref, axis=2)
         tgt[tgt >= self.threshold] = 0
         tgt[tgt > 0] = 255
-        return tgt
+        return tgt.astype(np.uint8)
 
 
 class Morph(Module):
@@ -197,7 +194,7 @@ class Dilate(Morph):
         if self.iterations == 0:
             return src
 
-        tgt = np.zeros(src.shape)
+        tgt = np.zeros(src.shape, dtype=np.uint8)
         tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
         return tgt
 
@@ -217,7 +214,7 @@ class Erode(Morph):
         if self.iterations == 0:
             return src
 
-        tgt = np.zeros(src.shape)
+        tgt = np.zeros(src.shape, dtype=np.uint8)
         tgt[scnd.binary_erosion(src, iterations=self.iterations)] = 255
         return tgt
 
@@ -482,7 +479,7 @@ class Hough(Module):
             img_h, img_w = self.src.shape
 
             # abort if the sign size does not fit
-            if img_h/2 < h or h < 10 or img_w/2 < w or w < 10:
+            if h < 10 or w < 10:
                 log.debug('discarding %s %dx%d sized triangle', key, h, w)
                 continue
 

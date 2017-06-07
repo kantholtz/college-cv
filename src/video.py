@@ -35,13 +35,24 @@ class Buffer():
         n, w, h, _ = original.shape
 
         self._original = original
-        self._binary = np.zeros((n, w, h))
-        self._edges = np.zeros((n, w, h))
+        self._binary = np.zeros((n, w, h), dtype=np.uint8)
+        self._edges = np.zeros((n, w, h), dtype=np.uint8)
 
 
 class Pipeline():
 
-    def __init__(self, config=None):
+    @property
+    def binary(self) -> bool:
+        return self._binary
+
+    @property
+    def edges(self) -> bool:
+        return self._edges
+
+    def __init__(self, config=None, binary=False, edges=False):
+        self._binary = binary
+        self._edges = edges
+
         if config is None:
             self._conf = {
                 'ReferenceColor': '200, 20, 20',
