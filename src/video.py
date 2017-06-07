@@ -99,3 +99,80 @@ class Pipeline():
 
         return (self._mod_hough.barycenter.items(),
                 self._mod_hough.pois)
+
+
+class ROI():
+
+    @property
+    def r0(self) -> int:
+        return self._r0
+
+    @property
+    def r1(self) -> int:
+        return self._r1
+
+    @property
+    def c0(self) -> int:
+        return self._c0
+
+    @property
+    def c1(self) -> int:
+        return self._c1
+
+    @property
+    def vy(self) -> np.array:
+        return self._vy
+
+    @property
+    def vx(self) -> np.array:
+        return self._vx
+
+    @property
+    def dead(self) -> bool:
+        return self.health <= 0
+
+    @property
+    def health(self) -> int:
+        return self._health
+
+    # ---
+
+    def __init__(self,
+                 h: int, w: int,              # source dimension
+                 vy: np.array, vx: np.array,  # vertices
+                 lifespan: int):              # for life decay
+
+        self._vy = vy
+        self._vx = vx
+        self._health = lifespan
+
+        vy_min = np.min(vy)
+        vy_max = np.max(vy)
+
+        vx_min = np.min(vx)
+        vx_max = np.max(vx)
+
+        ry_off = vy_max - vy_min
+        rx_off = vx_max - vx_min
+
+        self._r0 = vy_min - ry_off
+        self._r0 = 0 if self.r0 < 0 else self.r0
+
+        self._r1 = vy_max + ry_off
+        self._r1 = h - 1 if self.r1 >= h else self.r1
+
+        self._c0 = vx_min - rx_off
+        self._c0 = 0 if self.c0 < 0 else self.c0
+
+        self._c1 = vx_max + rx_off
+        self._c1 = w - 1 if self.c1 >= w else self.c1
+
+    def punish(self):
+        self._health -= 1
+
+    def intersects(self, other) -> bool:
+        return not (
+            self.r0 > other.r1 or
+            self.r1 < other.r0 or
+            self.c0 > other.c1 or
+            self.c1 < other.c0)

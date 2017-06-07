@@ -26,6 +26,8 @@ from src import tmeasure
 # ---
 
 
+ROI_LIFESPAN = 30
+
 log = logger(name=__name__[2:-2])
 cfg = configparser.ConfigParser()
 
@@ -67,10 +69,8 @@ def _draw_indicator(frame, y, x, vy, vx):
 
 
 def _draw_roi(arr, i, roi, val):
-    ry, rx = roi
-
-    y0, y1 = ry[0] - 1, ry[1]
-    x0, x1 = rx[0] - 1, rx[1]
+    y0, y1 = roi.r0 - 1, roi.r1
+    x0, x1 = roi.c0 - 1, roi.c1
 
     # clockwise from topleft
     rr, cc = skd.polygon_perimeter(
@@ -79,30 +79,9 @@ def _draw_roi(arr, i, roi, val):
 
     arr[i, rr, cc] = val
 
-
-def _calc_roi(h, w, vy, vx):
-    vy_min = np.min(vy)
-    vy_max = np.max(vy)
-
-    vx_min = np.min(vx)
-    vx_max = np.max(vx)
-
-    ry_off = (vy_max - vy_min) // 2
-    rx_off = (vx_max - vx_min) // 2
-
-    ry_min = vy_min - ry_off
-    ry_min = 0 if ry_min < 0 else ry_min
-
-    ry_max = vy_max + ry_off
-    ry_max = h - 1 if ry_max >= h else ry_max
-
-    rx_min = vx_min - rx_off
-    rx_min = 0 if rx_min < 0 else rx_min
-
-    rx_max = vx_max + rx_off
-    rx_max = w - 1 if rx_max >= w else rx_max
-
-    return (ry_min, ry_max), (rx_min, rx_max)
+    # color indicator for life decay
+    rr, cc = skd.circle(y0, x0, 5)
+    arr[i, rr, cc] = val * (roi.health / ROI_LIFESPAN)
 
 
 def _get_vertices(keys, pois):
@@ -119,50 +98,55 @@ def _find_rois(buf, frame, barycenters, pois):
     for keys, (y, x) in barycenters:
         vy, vx = _get_vertices(keys, pois)
         _draw_indicator(frame, y, x, vy, vx)
-        rois.append(_calc_roi(w, h, vy, vx))
+        rois.append(video.ROI(w, h, vy, vx, ROI_LIFESPAN))
 
     return rois
+
+
+def _scan_full(buf, frame, i, pipe):
+    buf.binary[i] = pipe.binarize(frame.astype(np.int64))
+    if pipe.binary and not pipe.edges:
+        return []
+
+    buf.edges[i] = pipe.edge(buf.binary[i])
+    if pipe.edges:
+        return []
+
+    barycenters, pois = pipe.detect(buf.edges[i], buf.binary[i])
+    return _find_rois(buf, frame, barycenters, pois)
+
+
+def _scan_roi(buf, frame, i, pipe, roi):
+    r0, r1, c0, c1 = roi.r0, roi.r1, roi.c0, roi.c1
+
+    buf.binary[i, r0:r1, c0:c1] = pipe.binarize(
+        frame[r0:r1, c0:c1].astype(np.int64))
+
+    _draw_roi(buf.binary, i, roi, 255)
+
+    buf.edges[i, r0:r1, c0:c1] = pipe.edge(
+        buf.binary[i, r0:r1, c0:c1])
+
+    _draw_roi(buf.edges, i, roi, 255)
+
+    return pipe.detect(
+        buf.edges[i, r0:r1, c0:c1],
+        buf.binary[i, r0:r1, c0:c1])
 
 
 def _process(buf, frame, i, pipe, rois):
     _, w, h, _ = buf.original.shape
 
+    # buf.original[i] //= 3
+    new_rois = []
+
     # full scan
-    if len(rois) == 0:
-        buf.binary[i] = pipe.binarize(frame.astype(np.int64))
-        if pipe.binary and not pipe.edges:
-            return []
-
-        buf.edges[i] = pipe.edge(buf.binary[i])
-        if pipe.edges:
-            return []
-
-        frame //= 3
-        barycenters, pois = pipe.detect(buf.edges[i], buf.binary[i])
-        return _find_rois(buf, frame, barycenters, pois)
+    if i % 15 == 0 or len(rois) == 0:
+        new_rois += _scan_full(buf, frame, i, pipe)
 
     # roi scan
-    new_rois = []
     for roi in rois:
-        (r0, r1), (c0, c1) = roi
-
-        # it is not possible to have pipe.binary or pipe.edges and
-        # running into this loop
-
-        buf.binary[i, r0:r1, c0:c1] = pipe.binarize(
-            frame[r0:r1, c0:c1].astype(np.int64))
-
-        _draw_roi(buf.binary, i, roi, 255)
-
-        buf.edges[i, r0:r1, c0:c1] = pipe.edge(
-            buf.binary[i, r0:r1, c0:c1])
-
-        _draw_roi(buf.edges, i, roi, 255)
-
-        frame //= 3
-        barycenters, pois = pipe.detect(
-            buf.edges[i, r0:r1, c0:c1],
-            buf.binary[i, r0:r1, c0:c1])
+        barycenters, pois = _scan_roi(buf, frame, i, pipe, roi)
 
         # from skimage.io import imsave
         # imsave('original.png', buf.original[i, r0:r1, c0:c1])
@@ -175,11 +159,18 @@ def _process(buf, frame, i, pipe, rois):
         if len(barycenters) > 0:
             keys, (y, x) = list(barycenters)[0]
             vy, vx = _get_vertices(keys, pois)
-            vy = tuple(map(lambda y: r0 + y, vy))
-            vx = tuple(map(lambda x: c0 + x, vx))
+            vy = tuple(map(lambda y: roi.r0 + y, vy))
+            vx = tuple(map(lambda x: roi.c0 + x, vx))
 
-            _draw_indicator(frame, r0+y, c0+x, vy, vx)
-            new_rois.append(_calc_roi(w, h, vy, vx))
+            new_roi = video.ROI(w, h, vy, vx, ROI_LIFESPAN)
+            if not any([new_roi.intersects(r) for r in new_rois]):
+                _draw_indicator(frame, roi.r0+y, roi.c0+x, vy, vx)
+                new_rois.append(new_roi)
+
+        else:
+            if not roi.dead:
+                roi.punish()
+                new_rois.append(roi)
 
     return new_rois
 
@@ -203,10 +194,10 @@ def process(vid: np.ndarray, only, config=None) -> video.Buffer:
     stats = []
 
     for i, frame in tqdm(buf, total=buf.framecount, unit='frames'):
-        stats.append('.' if len(rois) == 0 else 'x')
+        stats.append(len(rois) if len(rois) > 0 else '.')
         rois = _process(buf, frame, i, pipe, rois)
 
-    print(''.join(stats) + '\n')
+    print(''.join(map(str, stats)) + '\n')
     done()
 
     return buf
@@ -242,7 +233,7 @@ def parse_args():
         help='only apply --binary and edge detection')
 
     parser.add_argument(
-        '--save_all',
+        '--save-all',
         action='store_true',
         help='save not only the result but all intermediate steps')
 
