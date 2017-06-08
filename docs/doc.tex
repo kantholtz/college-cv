@@ -59,8 +59,37 @@
 \chapter{Introduction}
 
 This document describes the implementation of a system to detect yield
-signs from images. {\color{red}{To be written: Some general
-    introduction (problem description, scope, constraints, reason)}}
+signs from images and videos. It is a proof of concept realization
+based on a course of machine vision at RheinMain University of Applied
+Sciences in 2017. The scope of the task is to detect yield signs and
+to implement some operations on images including but not restricted to
+color segmentation, morphological operations, hough transform for
+lines and highlighting found yield signs. This chapter describes the
+model, requirements and notation used in this document. Chapter
+\ref{chap:pipeline} outlines a pipeline of operations and all utilized
+algorithms and heuristics for detecting yield signs. The following
+chapter \ref{chap:implementation} describes the implementation of a
+graphical system to interactively adjust free parameters to test
+detection and the transition of the pipeline for use in
+videos. Chapter \ref{chap:evaluation} highlights what the current
+implementation is able to detect, describes cases where detection
+fails and discusses performance considerations. The final chapter
+contains a prospect for utilizing this system.
+
+
+\section{Model}
+
+Given that detecting yield signs with high accuracy is a hard problem
+as many factors complicate the detection process some constraints
+apply for working examples. The color values of traffic signs are
+standardized in Germany. Most signs color is faded due to their age
+however and when capturing pictures the daytime and weather also alter
+the red value of the sign. For this proof of concept yield signs have
+distinct closed red border and are prominently placed in the
+picture. The images are of high quality and may have various
+resolutions. Videos are constrained likewise and have a resolution of
+480p.
+
 
 \section{Requirements}
 
@@ -68,36 +97,39 @@ The system should be able to detect yield signs from the perspective
 of a car participating in traffic. This means that the point of view
 is approximately between one and two meters from the ground on the
 right lane\footnote{Except for countries with left hand traffic that
-  are not considered here.} of a street. There are no hard
-requirements regarding size and quality of the images. For testing
-purposes both small images with inferior quality and high resolution
-images should be tested. This is necessary to make a prediction
-whether the system is suitable for real-time use in videos. Videos may
-be cropped and shrunk to fit these requirements. The detection should
-work with changing ambient light. Without white balancing, the
-standardized red color value of yield signs changes when captured by
-camera based on the daytime. The color also varies greatly when the
-sunlight is reflected on the sign.
-
+  are not considered here.} of a street. For testing purposes both
+small images with inferior quality and high resolution images should
+be classified. This is necessary to make a prediction whether the
+system is suitable for real-time use in videos. For videos a real time
+application is not needed but a thorough evaluation and prediction
+should be made whether it would be possible to do so.
 
 \section{Notation}
 
-All images are either two or three dimensional. Two dimensional images
-are either grayscale or binary images, three dimensional images are
-color images with three color components: red, green and blue (in this
-order). Origin of each image is the top left corner and iteration is
-row-major. This is reflected when addressing single pixel
-values. Given some image \( I \), then \( I(y, x) \) returns the pixel
-\( y \) in the images' vertical and \( x \) in the images' horizontal
-direction. Binary images are two dimensional and every value is in
-\(\{ 0, 1 \}\). Thus, boolean operations can be applied. Pixel values
-of 0 are called ``black'' or ``false'' and values of 1 are called
-``white'' or ``true''. Each step in the pipeline that is described in
-chapter \ref{chap:pipeline} has a \( source \) image which is the
-result of the previous step of the pipeline and a \( target \) image
-that is written to.
+Images are either two or three dimensional. The first dimension is the
+images' height, the second is the images' width. For three dimensional
+images, the third axis contains the three color components red, green
+and blue (in this order). Origin of each image is the top left corner
+and iteration is row-major. This is reflected when addressing single
+pixel values. Given some color image \( I \), then \( I(y, x, 2) \)
+returns the blue color components pixel value of \( y \) in the
+images' vertical and \( x \) in the images' horizontal
+direction. Color and gray scale pictures have a range of \( \{0, 1,
+..., 255\} \).  Binary images are two dimensional and every value is
+in \(\{ 0, 1 \}\). Thus, boolean operations can be applied. Pixel
+values of 0 are called ``black'' or ``false'' and values of 1 are
+called ``white'' or ``true''. Each step in the pipeline that is
+described in chapter \ref{chap:pipeline} has a \( source \) image
+which is the result of the previous step of the pipeline and a \(
+target \) image that is written to.
 
-{\color{red}{To do: Nice picture of the final result}}
+\begin{figure}
+  \centering
+    \includegraphics[width=1\textwidth]{src/result}
+  \caption{Result of detecting a yield sign. The shape of the sign
+    and an indicator is drawn to the result image.}
+  \label{img:result}
+\end{figure}
 
 
 \pagebreak
