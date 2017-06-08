@@ -272,7 +272,9 @@ set if any of the masked source pixels is white. The equation changes
 accordingly and is defined in \ref{eq:morph_dilation}. An example is
 given in \ref{eq:morph_dilation-example}. It can be observed that the
 white form grows and the black grains inside that form vanish. Note
-that the form is not smoothed and the cut propagates to the target.
+that the form is not smoothed and the cut propagates to the target. To
+close even these cuts, a new structuring element can be used which
+returns all eight neighboring pixels instead of just four.
 
 \begin{equation}\label{eq:morph_dilation}
   target(y, x) = 1 \iff \bigvee_{s \in S_{y, x}} s \neq 0
@@ -412,19 +414,136 @@ quite useful can be found in figure \ref{img:filling}
 \end{figure}
 
 
-\section{Edge Detection}
+\section{Edge and Line Detection}
 \label{sec:pipeline_edgedet}
-{\color{red}{To be written: Either Dilation + XOR or Sobel for Fast Hough}}
 
+The next step of the pipeline consists of detecting straight lines in
+the image, selecting triangles based on their points of intersection
+and applying heuristics to classify whether they might have emerged
+from a yield sign in the original image. The algorithm implemented in
+the application uses another dilation step for edge exposure and
+straight line hough transform for line detection. Note however that
+this is comparatively slow and thus another approach is described
+also. This can not be evaluated however as it was not implemented but
+should display much better performance.
 
-\section{Line Detection}
+\subsection{Dilation and straight line hough transform}
 \label{sec:pipeline_linedet}
-{\color{red}{To be written: Either Hough or Fast Hough}}
 
+The goal of applying a hough transform to an image is to detect
+lines. Thus both for accuracy and performance reasons one pixel wide
+edges need to be extracted from the binary source image. A simple
+approach is to apply one iteration of dilation and XOR'ing the result
+with the source image. The inner white area is punched out that
+way. An example is given in figure \ref{img:dilation_xor}.
+
+\begin{figure}
+  \begin{subfigure}[t]{0.316\textwidth}
+    \includegraphics[width=1\textwidth, frame]{src/edges/original}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.316\textwidth}
+    \includegraphics[width=1\textwidth, frame]{src/edges/filled}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.316\textwidth}
+    \includegraphics[width=1\textwidth, frame]{src/edges/edged}
+  \end{subfigure}
+  \caption{The middle image exhibits the state after the component
+    labeling step and the right image only exposes one pixel wide
+    edges of the found shapes using dilation and XOR.}
+  \label{img:dilation_xor}
+\end{figure}
+
+Geometrically lines can be expressed by the Hesse normal form. In this
+notation, a line is expressed by its orthogonal normal vector and its
+distance from the coordinate systems origin. This normal vector is
+defined by its angle. An equation for the line is given in
+\ref{eq:hesse}. For detecting lines with the hough transform a matrix
+is created that counts for each angle and distance the amount of white
+pixels found in the source image. In this application, angles range
+from -90 degrees to 90 degrees and the distance may be negative. Thus
+the hough matrix (given \( h \) for the images height and \( w \) for
+the images width) is of size \( 180 \times r \), where \( r = 2 *
+\sqrt{h^2 + w^2} \). The first dimension contains all angles \( \alpha
+\) and the second dimension all distances \( \delta \).
+
+\begin{equation}\label{eq:hesse}
+  g: x * cos(\alpha) + y * sin(\alpha) = \delta
+\end{equation}
+
+The basic idea of the hough transform for detecting lines is now to
+consider for every white pixel found in the source image the
+possibility that it belongs to one or more lines. Thus for each white
+pixel the hough matrix is incremented at every possible angle for that
+pixels distance from the origin. Peaks in the matrix indicate that
+many pixels with the same distance from the origin were found for the
+respective angle. Selecting these peaks lead to a set of possible
+lines, expressed by angle and distance.
+
+\begin{wrapfigure}{r}{0.6\textwidth}
+  \begin{center}
+    \includegraphics[width=0.58\textwidth]{src/hough_tf}
+  \end{center}
+  \caption[x]{Hough matrix visualization with the distances in the first
+    dimension\footnotemark}
+  \label{img:red_detection}
+\end{wrapfigure}
+\footnotetext{Image from the scikit-image project: scikit-image.org}
+
+
+\subsection{Sobel and fast hough transform}
+
+The former approach is computationally expensive as for every white
+pixel found the whole range of angles needs to be incremented. The
+only reason for doing so stems from not knowing from that single value
+which angle corresponds to the possibly found line. When detecting
+edges in the image the Sobel filter can be applied. This filter
+calculates the direction depended gradient of the gray value
+difference of consecutive pixels. The direction is either horizontal
+or vertical. For getting the horizontal gradients of an image, a 2d
+convolution is applied using the source image and the matrices defined
+in \ref{eq:sobel}.
+
+\begin{equation}\label{eq:sobel}
+  \begin{split}
+    sobel_h := \begin{bmatrix}
+      -1 & 0 & 1 \\
+      -2 & 0 & 2 \\
+      -1 & 0 & 1
+    \end{bmatrix}
+    \qquad
+    sobel_v := sobel_h^T
+    \end{split}
+\end{equation}
+
+Thus for getting the direction independent gradients, which is
+necessary to find the actual orientation of the edges, the convolution
+is applied both for the horizontal and vertical direction and the two
+resulting matrices \( A_h = conv2d(source, sobel_h) \) and \( A_v =
+conv2d(source, sobel_v) \) are combined.
+
+\begin{equation}
+  gradients = \sqrt{A_h^2 + A_v^2}
+\end{equation}
+
+The matrix \( gradients \) now contains the length of each gradient at
+every pixel. For every gradient that exceeds some free parameter
+threshold the hough matrix is incremented with the following value of
+\( \alpha \).
+
+\begin{equation}
+  \alpha_{y, x} = \frac{180}{\pi} * arctan2(A_{h,y,x}, A_{v,y,x})
+\end{equation}
 
 \section{Yield Sign Detection}
 \label{sec:pipeline_yielddet}
-{\color{red}{To be written}}
+
+The result of the line detection in the previous section only returns
+all lines of the most prominent edges in the source image. There is no
+concept of closed shapes or even any classification for yield signs
+yet. How to detect shapes and discriminate yield signs from these
+shapes is described below.
 
 
 \subsection{Finding points of intersection}
@@ -477,15 +596,14 @@ image boundary are free parameters. The intersections are saved as an
 unambiguous mapping of \( T = min(i, j) \to max(i, j) \to (y, x)_{i,
   j} \).
 
-\begin{wrapfigure}{r}{0.6\textwidth}
-  \begin{center}
-    \includegraphics[width=0.58\textwidth]{src/red_detection}
-  \end{center}
+\begin{figure}
+  \centering
+    \includegraphics[width=.7\textwidth, frame]{src/red_detection}
   \caption{An example where a triangle with the shape of a yield sign
     is found if no prior filtering of intersections based on detected
     red value is applied.}
   \label{img:red_detection}
-\end{wrapfigure}
+\end{figure}
 
 
 \subsection{Determining Triangles and Yield Signs}
