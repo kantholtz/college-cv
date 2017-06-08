@@ -134,16 +134,46 @@ class Binarize(Module):
 
     @property
     def reference_color(self) -> tuple:
-        return self._reference_color
+        return [self.ref_red, self.ref_green, self.ref_blue]
 
     @reference_color.setter
     def reference_color(self, color: tuple):
-        self._reference_color = color
+        assert len(color) == 3
+        self.ref_red = color[0]
+        self.ref_green = color[1]
+        self.ref_blue = color[2]
+
+    @property
+    def ref_red(self) -> int:
+        return self._ref_red
+
+    @ref_red.setter
+    def ref_red(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_red = val
+
+    @property
+    def ref_green(self) -> int:
+        return self._ref_green
+
+    @ref_green.setter
+    def ref_green(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_green = val
+
+    @property
+    def ref_blue(self) -> int:
+        return self._ref_blue
+
+    @ref_blue.setter
+    def ref_blue(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_blue = val
 
     def __init__(self, name: str):
         super().__init__(name)
         self._threshold = 100
-        self._reference_color = [180, 20, 20]
+        self.reference_color = [180, 20, 20]
 
     def execute(self) -> np.ndarray:
         log.info('binarize: threshold=%f, reference=%s',

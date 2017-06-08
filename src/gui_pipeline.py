@@ -215,6 +215,21 @@ class Preprocessing(Tab):
         self._add_slider(layout, fn, 0, 255,
                          initial=init, label='Binarization δ')
 
+        init = self._mod_binarize.ref_red
+        fn = self._mod_proxy(self._mod_binarize, 'ref_red')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Red')
+
+        init = self._mod_binarize.ref_green
+        fn = self._mod_proxy(self._mod_binarize, 'ref_green')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Green')
+
+        init = self._mod_binarize.ref_blue
+        fn = self._mod_proxy(self._mod_binarize, 'ref_blue')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Blue')
+
         init = self._mod_dilate.iterations
         fn = self._mod_proxy(self._mod_dilate, 'iterations')
         self._add_slider(layout, fn, 0, 10,
