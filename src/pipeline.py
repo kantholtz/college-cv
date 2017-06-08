@@ -12,7 +12,7 @@ import skimage.transform as skt
 from . import tmeasure
 from . import logger
 log = logger(__name__)
-
+log.propagate = False
 
 # ---
 
@@ -37,8 +37,14 @@ class Pipeline():
 
         return self
 
+    def __sub__(self, mod):
+        self._module_names.remove(mod.name)
+        del self._modules[mod.name]
+
     def _run(self, name: str) -> None:
         mod = self._modules[name]
+        if mod.disabled:
+            return
 
         mod.arr = mod.execute()
         assert mod.arr is not None
@@ -70,6 +76,9 @@ class Pipeline():
         executed()
 
 
+# ---
+
+
 class Module():
 
     @property
@@ -93,9 +102,18 @@ class Module():
         assert 0 <= np.amin(arr) and np.amax(arr) <= 255
         self._arr = arr
 
+    @property
+    def disabled(self) -> bool:
+        return self._disabled
+
+    @disabled.setter
+    def disabled(self, state: bool):
+        self._disabled = state
+
     def __init__(self, name: str):
         assert type(name) is str
         self._name = name
+        self._disabled = False
 
     def execute(self) -> None:
         raise NotImplementedError
@@ -111,36 +129,69 @@ class Binarize(Module):
 
     @threshold.setter
     def threshold(self, threshold: float):
-        assert 0 <= threshold and threshold <= 1
+        assert 0 <= threshold and threshold <= 255
         self._threshold = threshold
 
     @property
-    def amplification(self):
-        return self._amplification
+    def reference_color(self) -> tuple:
+        return [self.ref_red, self.ref_green, self.ref_blue]
 
-    @amplification.setter
-    def amplification(self, amplification: float):
-        assert 0 < amplification
-        self._amplification = amplification
+    @reference_color.setter
+    def reference_color(self, color: tuple):
+        assert len(color) == 3
+        self.ref_red = color[0]
+        self.ref_green = color[1]
+        self.ref_blue = color[2]
+
+    @property
+    def ref_red(self) -> int:
+        return self._ref_red
+
+    @ref_red.setter
+    def ref_red(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_red = val
+
+    @property
+    def ref_green(self) -> int:
+        return self._ref_green
+
+    @ref_green.setter
+    def ref_green(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_green = val
+
+    @property
+    def ref_blue(self) -> int:
+        return self._ref_blue
+
+    @ref_blue.setter
+    def ref_blue(self, val: int):
+        assert 0 <= val and val <= 255
+        self._ref_blue = val
 
     def __init__(self, name: str):
         super().__init__(name)
-        self._threshold = 0.3
-        self._amplification = 1.8
+        self._threshold = 100
+        self.reference_color = [180, 20, 20]
 
     def execute(self) -> np.ndarray:
-        log.info('binarize: threshold=%f, amplification=%f',
-                 self.threshold, self.amplification)
+        log.info('binarize: threshold=%f, reference=%s',
+                 self.threshold, str(self.reference_color))
 
-        a = self.amplification
         src = self.pipeline[-1].arr.astype(np.int64)
-        tgt = (src[:, :, 0] * a) - (src[:, :, 1] + src[:, :, 2])
+        return self.apply(src)
 
-        e = 255 * self.threshold
-        tgt[tgt < e] = 0
-        tgt[tgt > e] = 255
+    def apply(self, src):
+        assert src.ndim == 3
 
-        return tgt
+        ref = self._reference_color_arr = np.full(
+            src.shape, self.reference_color)
+
+        tgt = np.linalg.norm(src - ref, axis=2)
+        tgt[tgt >= self.threshold] = 0
+        tgt[tgt > 0] = 255
+        return tgt.astype(np.uint8)
 
 
 class Morph(Module):
@@ -167,12 +218,14 @@ class Dilate(Morph):
         log.info('dilate with %d iterations', self.iterations)
 
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         if self.iterations == 0:
             return src
 
-        tgt = np.zeros(src.shape)
+        tgt = np.zeros(src.shape, dtype=np.uint8)
         tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
-
         return tgt
 
 
@@ -185,15 +238,17 @@ class Erode(Morph):
         log.info('erode with %d iterations', self.iterations)
 
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         if self.iterations == 0:
             return src
 
-        tgt = np.zeros(src.shape)
+        tgt = np.zeros(src.shape, dtype=np.uint8)
         tgt[scnd.binary_erosion(src, iterations=self.iterations)] = 255
         return tgt
 
 
-# Currently unused...
 class Fill(Module):
 
     def __init__(self, name: str):
@@ -201,6 +256,9 @@ class Fill(Module):
 
     def execute(self) -> np.ndarray:
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         labeled, labels = scnd.label(np.invert(src.astype(np.bool)))
 
         max_count = 0
@@ -224,6 +282,9 @@ class Edger(Module):
 
     def execute(self) -> np.ndarray:
         src = self.pipeline[-1].arr
+        return self.apply(src)
+
+    def apply(self, src: np.ndarray) -> np.ndarray:
         tgt = np.zeros(src.shape)
         tgt[scnd.binary_dilation(src)] = 255
         return (src.astype(np.bool) ^ tgt.astype(np.bool)) * 255
@@ -234,6 +295,14 @@ class Hough(Module):
     @property
     def src(self) -> np.ndarray:
         return self._src
+
+    @property
+    def binarized(self) -> np.ndarray:
+        return self._binarized
+
+    @binarized.setter
+    def binarized(self, binarized: np.ndarray):
+        self._binarized = binarized
 
     # ---
 
@@ -263,6 +332,15 @@ class Hough(Module):
     def red_detection(self, size: int):
         assert 0 < size
         self._red_detection = int(size)
+
+    @property
+    def patmatch_threshold(self) -> float:
+        return self._patmatch_threshold
+
+    @patmatch_threshold.setter
+    def patmatch_threshold(self, t: float):
+        assert 0 <= t and t <= 1
+        self._patmatch_threshold = t
 
     # ---
 
@@ -325,7 +403,6 @@ class Hough(Module):
               (int -> int -> tuple(3))
 
         """
-        binarized = self.pipeline['edge_dilate'].arr
         off = self.red_detection // 2
 
         for i, j, coords in self._iter_intersections(h_coords):
@@ -333,7 +410,7 @@ class Hough(Module):
 
             # abort if there's no red to be found on
             # the point of intersection
-            if not np.any(binarized[y-off:y+off, x-off:x+off]):
+            if not np.any(self.binarized[y-off:y+off, x-off:x+off]):
                 fmt = 'discarding %s because it lacks red'
                 log.debug(fmt, str(coords))
                 continue
@@ -389,16 +466,7 @@ class Hough(Module):
             # sum of all vertices and divide them by
             # their amount (always 3 in this case)
             center = np.array([np.sum(z) // 3 for z in zip(*points)])
-
-            # TODO may be removed
-            # calculate an estimation for the radius
-            r = 0
-            for p in points:
-                d = np.linalg.norm(center - np.array(p))
-                if d > r:
-                    r = int(d * 1.1)
-
-            triangles[key] = tuple(center) + (r, )
+            triangles[key] = tuple(center)
 
         # finally, filter found triangles
         log.info('found %d triangles', len(triangles))
@@ -438,10 +506,10 @@ class Hough(Module):
             x0, x1 = np.min(xcoords), np.max(xcoords)
 
             h, w = y1 - y0, x1 - x0
-            img_h, img_w = self._src.shape
+            img_h, img_w = self.src.shape
 
             # abort if the sign size does not fit
-            if img_h/2 < h or h < 20 or img_w/2 < w or w < 20:
+            if h < 10 or w < 10:
                 log.debug('discarding %s %dx%d sized triangle', key, h, w)
                 continue
 
@@ -485,7 +553,9 @@ class Hough(Module):
         done()
 
         # everybody walk the pattern match
-        return np.sum(ref - tri) / ref.size < .2  # 90%
+        d = np.sum(ref ^ tri) / ref.size
+        log.debug('pattern matching delta: %f', d)
+        return d < self.patmatch_threshold
 
     def __init__(self, name: str):
         super().__init__(name)
@@ -494,12 +564,17 @@ class Hough(Module):
         self.min_angle = 45
         self.min_distance = 100
         self.red_detection = 15
+        self.patmatch_threshold = 0.2
 
     def execute(self) -> np.ndarray:
-        self._src = self.pipeline[-1].arr
-        tgt = self.pipeline[0].arr
+        src = self.pipeline[-1].arr
+        self.binarized = self.pipeline['pre_dilate'].arr
+        self.apply(src)
+        return self.pipeline[0].arr
 
-        h, w = self._src.shape
+    def apply(self, src: np.ndarray) -> np.ndarray:
+        self._src = src
+        h, w = self.src.shape
 
         # reset
         self._pois = defaultdict(dict)  # points of intersections
@@ -524,7 +599,7 @@ class Hough(Module):
         done(len(angles))
 
         if len(angles) == 0:
-            return tgt
+            return
 
         self._angles = angles
         self._dists = dists
@@ -575,5 +650,3 @@ class Hough(Module):
         # populate self.barycenter by calculating
         # and filtering triangles
         self._calc_triangles()
-
-        return tgt

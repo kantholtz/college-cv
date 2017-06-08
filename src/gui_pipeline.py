@@ -210,15 +210,25 @@ class Preprocessing(Tab):
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
-        init = self._mod_binarize.amplification
-        fn = self._mod_proxy(self._mod_binarize, 'amplification')
-        self._add_slider(layout, fn, 5, 15, 5,
-                         initial=init, label='Red amplification')
-
         init = self._mod_binarize.threshold
         fn = self._mod_proxy(self._mod_binarize, 'threshold')
-        self._add_slider(layout, fn, 1, 100, 100,
+        self._add_slider(layout, fn, 0, 255,
                          initial=init, label='Binarization δ')
+
+        init = self._mod_binarize.ref_red
+        fn = self._mod_proxy(self._mod_binarize, 'ref_red')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Red')
+
+        init = self._mod_binarize.ref_green
+        fn = self._mod_proxy(self._mod_binarize, 'ref_green')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Green')
+
+        init = self._mod_binarize.ref_blue
+        fn = self._mod_proxy(self._mod_binarize, 'ref_blue')
+        self._add_slider(layout, fn, 0, 255,
+                         initial=init, label='Reference Blue')
 
         init = self._mod_dilate.iterations
         fn = self._mod_proxy(self._mod_dilate, 'iterations')
@@ -255,51 +265,64 @@ class Preprocessing(Tab):
 
 class EdgeDetection(Tab):
 
+    @property
+    def fill(self) -> bool:
+        return self._fill
+
+    def _toggle_fill(self):
+        self._fill = self._fill_button.isChecked()
+
+        if self.fill:
+            self._mod_fill.disabled = False
+            self._view_right = self._widget.add_view(
+                self._mod_fill.arr, stats_right=None)
+
+        else:
+            self._mod_fill.disabled = True
+            self._widget.remove_view(self._view_right)
+            self._view_right.deleteLater()
+            self.update()
+
+        self.ping()
+
     def _init_gui(self):
-        self._widget = gui_image.ImageModule(self._mod_erode.arr)
+        edge_arr = self._mod_edger.arr
+        l_arr = self._mod_fill.arr if self.fill else edge_arr
+        self._widget = gui_image.ImageModule(l_arr)
 
-        self._view_dilate = self.widget.add_view(
-            self._mod_dilate.arr, stats_right=None)
-
-        self._view_edger = self.widget.add_view(
-            self._mod_edger.arr, stats_right=None)
+        if self.fill:
+            self._view_right = self._widget.add_view(
+                edge_arr, stats_right=None)
 
         # ---
 
         controls = self.widget.view.controls
         layout = qtw.QVBoxLayout()
 
-        init = self._mod_erode.iterations
-        fn = self._mod_proxy(self._mod_erode, 'iterations')
-        self._add_slider(layout, fn, 0, 10,
-                         initial=init, label='Erosion iterations')
-
-        init = self._mod_dilate.iterations
-        fn = self._mod_proxy(self._mod_dilate, 'iterations')
-        self._add_slider(layout, fn, 0, 10,
-                         initial=init, label='Dilation iterations')
+        btn = self._fill_button = qtw.QRadioButton('Fill')
+        btn.setChecked(True)
+        btn.toggled.connect(self._toggle_fill)
+        layout.addWidget(btn)
 
         controls.addLayout(layout)
 
     def __init__(self):
         super().__init__('Edge Exposure')
+        self._fill = True
 
-        self._mod_erode = pl.Erode('edge_erode')
-        self._mod_dilate = pl.Dilate('edge_dilate')
+        self._mod_fill = pl.Fill('edge_fill')
         self._mod_edger = pl.Edger('edge_edger')
 
-        self._mod_erode.iterations = 0
-        self._mod_dilate.iterations = 2
-
-        self + self._mod_erode
-        self + self._mod_dilate
+        self + self._mod_fill
         self + self._mod_edger
 
     def update(self):
         try:
-            self.widget.view.image.arr = self._mod_erode.arr
-            self._view_dilate.image.arr = self._mod_dilate.arr
-            self._view_edger.image.arr = self._mod_edger.arr
+            if self.fill:
+                self.widget.view.image.arr = self._mod_fill.arr
+                self._view_right.image.arr = self._mod_edger.arr
+            else:
+                self.widget.view.image.arr = self._mod_edger.arr
 
         except AttributeError:
             self._init_gui()
@@ -365,39 +388,35 @@ class Hough(Tab):
 
             tgt[rr, cc] = [255, 255, 255]
 
-        # barycenters
-        for y, x, r in mod.barycenter.values():
-            rr, cc = skd.circle(y, x, 2)
-            tgt[rr, cc] = [0, 255, 0]
+    def _draw_triangles(self, tgt):
+        mod = self._mod_hough
+        for (p0, p1, p2), (y, x) in mod.barycenter.items():
+            pois = (p0, p1), (p0, p2), (p1, p2)
+            py, px = zip(*[mod.pois[a][b] for a, b in pois])
 
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
+            rr, cc = skd.polygon_perimeter(
+                py + (py[0], ),
+                px + (px[0], ),
+                shape=tgt.shape)
 
+            tgt[rr, cc] = [255, 255, 255]
+
+            r = (np.max(py) - np.min(py)) * 2
+            rr, cc, val = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
+
+            tgt[rr, cc, 0] += val * 255
             tgt[tgt > 255] = 255
 
     def _draw_target(self):
         tgt = self._mod_hough.arr / 3
         self._draw_lines(tgt)
         self._draw_points(tgt)
+        self._draw_triangles(tgt)
         return tgt
 
     def _draw_result(self):
-        fac = 5
-        mod = self._mod_hough
-        tgt = mod.arr / fac
-        h, w, _ = tgt.shape
-
-        barycenter = mod.barycenter.values()
-        for y, x, r in barycenter:
-            rr, cc, vv = skd.circle_perimeter_aa(y, x, r, shape=tgt.shape)
-            tgt[rr, cc, 0] += vv * 255
-            tgt[rr, cc, 1] += vv * 255
-            tgt[rr, cc, 2] += vv * 255
-            tgt[tgt > 255] = 255
-
-            rr, cc = skd.circle(y, x, r, shape=tgt.shape)
-            tgt[rr, cc] *= fac
-
+        tgt = self._mod_hough.arr / 5
+        self._draw_triangles(tgt)
         return tgt
 
     def _init_gui(self, arr: np.ndarray):
@@ -422,6 +441,11 @@ class Hough(Tab):
         fn = self._mod_proxy(self._mod_hough, 'red_detection')
         self._add_slider(layout, fn, 3, 50,
                          initial=init, label='Red detection area')
+
+        init = self._mod_hough.patmatch_threshold
+        fn = self._mod_proxy(self._mod_hough, 'patmatch_threshold')
+        self._add_slider(layout, fn, 0, 20, 20,
+                         initial=init, label='Pattern matching threshold')
 
         controls.addLayout(layout)
 
