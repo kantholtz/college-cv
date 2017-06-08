@@ -147,82 +147,45 @@ depiction of this process is given in \ref{img:pipeline}.
 \section{Segmentation}
 \label{sec:pipeline_binarization}
 
-\begin{figure}
-  \begin{subfigure}[t]{0.5\textwidth}
-    \includegraphics[width=1\textwidth]{src/segmentation_source}
-  \end{subfigure}
-  \quad
-  \begin{subfigure}[t]{0.5\textwidth}
-    \includegraphics[width=1\textwidth]{src/segmentation_target}
-  \end{subfigure}
-  \caption{Color segmentation to create a binary image with red areas
-    marked true. The sign in the source image reflects a lot of
-    sunlight which lessens the saturation. Used parameters are \(
-    \alpha = 1.8, \delta = 0.3 * 255. \)}
-\end{figure}
-
 The first step of the whole pipeline consists of extracting the red
-color from the coloured input image \textit{source}. Thus a mapping
-for each pixel from three dimensions to one dimension is
-needed. Simply returning the red color component does not suffice, as
-with larger values of the green and blue components the source color
-either shifts towards yellow, magenta or white. A very simple method
-that is used in this application takes the red component, optionally
-amplifies it by some factor and substracts the green and blue
-components values.
+color from the colored input image \textit{source}. Thus a mapping for
+each pixel from three dimensions to one dimension is needed. Simply
+returning the red color component does not suffice, as with larger
+values of the green and blue components the source color either shifts
+towards yellow, magenta or white. The method used in this application
+takes a predefined red color vector, calculates the distance between
+the currently considered pixel value and applies a threshold for
+binarization to the target image. Equation \ref{eq:segmentation}
+describes this mapping formally. Let \( \Gamma = \{0, 1, ..., 255\} \)
+be all possible pixel values, \( v_{ref} \in \Gamma^3 \) the reference
+color and \( \delta \in \mathbb{N} \) the threshold, then the pixel
+value written to \( target \) depends on whether the threshold
+undercuts the Frobenius norm.
 
-Let \( \Gamma = \{0, 1, ..., 255\} \) be all possible pixel values, \(
-\delta \in \Gamma \) the threshold and \( \alpha \in \mathbb{R},
-\alpha \geq 1 \) the factor for red amplification, then the pixel
-written to the binarized image \textit{target} is:
-
-\begin{equation}\label{eq:binarization}
+\begin{equation}\label{eq:segmentation}
   \begin{split}
-    f & : \Gamma \times \Gamma \times \Gamma \to \mathbb{Z} \\
-    f(r, g, b) & = \alpha r - (g + b) \\
+    norm & : \Gamma^3 \to \mathbb{R} \\
+    norm(v, w) & = \sqrt{\sum_{1 \leq i \leq 3}(v_i - w_i)^2}  \\
     target(y, x) & =
     \begin{cases}
-      1 & \quad \text{if } f(source(y, x)) > \delta \\
+      1 & \quad \text{if } norm(source(y, x), v_{ref}) < \delta \\
       0 & \quad \text{else}
     \end{cases}
   \end{split}
 \end{equation}
 
-This method has one drawback however. There is no distinction between
-less saturated or darker shades of red and orange or magenta. This is
-a result of not taking the distance between green and blue into
-account. An example is depicted in Table
-\ref{table:binarization}. More elaborate variations of this
-calculation were tested (considering the ratio of red to all colors or
-weighting by green-blue distance) but this did not increase the
-overall quality of red detection. Actually, without constantly white
-balancing the camera used for capturing, narrowing the range of red
-would perform worse as the ambient light differs greatly over the
-course of a day. The drawback of this approach are more falsely marked
-areas of the image that have to be considered in all further steps.
-
-\begin{table}
-  \centering
-  \begin{tabular}{c r r r r r}
-
-    \textbf{Color} & \textbf{Red} & \textbf{Green} & \textbf{Blue} &
-    \textbf{\textit{f(r, g, b)}} & \textbf{\textit{target(y, x)}} \\ \hline
-
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_000000}} &   0 &   0 &   0 &    0 & 0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ffffff}} & 255 & 255 & 255 &  -51 & 0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_00ff00}} &   0 & 255 &   0 & -255 & 0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_0000ff}} &   0 &   0 & 255 & -255 & 0 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0000}} & 255 &   0 &   0 &  459 & 1 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8888}} & 255 & 125 & 125 &  209 & 1 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff8800}} & 255 & 125 &   0 &  334 & 1 \\ \hline
-    \parbox[c]{1em}{\includegraphics[width=1em]{src/bin_ff0088}} & 255 &   0 & 126 &  334 & 1
-
-  \end{tabular}
-  \caption{Example results of function \textit{f} in
-    \ref{eq:binarization} with \( \alpha=1.8, \delta=200 \). Note that
-    the result is equivalent for light red, orange and magenta.}
-  \label{table:binarization}
-\end{table}
+\begin{figure}
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/segmentation/original}
+  \end{subfigure}
+  \quad
+  \begin{subfigure}[t]{0.5\textwidth}
+    \includegraphics[width=1\textwidth]{src/segmentation/segmented}
+  \end{subfigure}
+  \caption{Color segmentation to create a binary image with red areas
+    marked true. \\ Used parameters are \( v_{ref} = (180, 20, 20) \)
+    and \( \delta = 100 \).}
+\end{figure}
 
 
 \section{Morphological operations}
