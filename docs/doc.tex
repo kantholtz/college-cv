@@ -512,20 +512,21 @@ pixel the hough matrix is incremented at every possible angle for that
 pixels distance from the origin. Peaks in the matrix indicate that
 many pixels with the same distance from the origin were found for the
 respective angle. Selecting these peaks lead to a set of possible
-lines, expressed by angle and distance.
+lines, expressed by angle and distance. An example hough matrix can be
+seen in figure \ref{img:hough}
 
-\begin{wrapfigure}{r}{0.6\textwidth}
-  \begin{center}
+\begin{figure}
+  \centering
     \includegraphics[width=0.58\textwidth]{src/hough_tf}
-  \end{center}
-  \caption[x]{Hough matrix visualization with the distances in the first
-    dimension\footnotemark}
-  \label{img:red_detection}
-\end{wrapfigure}
-\footnotetext{Image from the scikit-image project: scikit-image.org}
+  \caption{Hough matrix visualization with the distances in the
+    first dimension (Image taken from the scikit-image project:
+    scikit-image.org)}
+  \label{img:hough}
+\end{figure}
 
 
 \subsection{Sobel and fast hough transform}
+\label{sec:fast_hough}
 
 The former approach is computationally expensive as for every white
 pixel found the whole range of angles needs to be incremented. The
@@ -697,25 +698,182 @@ distorted by perspective.
 \chapter{Implementation}
 \label{chap:implementation}
 
+A reference implementation of the previously described pipeline exists
+for both static images and video. For images a graphical interface is
+offered which allows for tuning free parameters and explore the
+capabilities of the system. Videos are processed by a script which, in
+its current form, does not allow real time processing. It offers
+performance metrics for evaluating whether it is suitable for real
+time use however.
+
+\section{The graphical user interface}
+
+The implementation sticks close to the definition of the
+pipeline. After loading some image which is displayed on a canvas
+where it can be panned and zoomed, the systems start to apply all
+steps of the pipeline and draws indicators for found yield signs if
+any were found. Different tabs can be clicked where steps of the
+pipeline are grouped and intermediate results displayed. Free
+parameters are easily adjustable by using the widgets on the left hand
+side. When altering any of those parameters, the pipeline is executed
+again and the results are updated. Figure \ref{img:gui_morph} displays
+the steps where the image is segmented and morphological operations
+are applied. Figure \ref{img:gui_hough} shows how the geometrical
+operations are visualized. The lines found by the hough transform are
+drawn in red and all considered points of intersection are marked with
+their shape indicating the area where some red was found.
+
+\begin{figure}
+  \centering
+    \includegraphics[width=1\textwidth, frame]{src/gui_morph}
+  \caption{Selected tab of the GUI working with binary images. Note
+    the sliders for adjusting the different free parameters used in
+    those steps. The intermediate results are displayed on the
+    respective canvases (e.g. the middle canvas where dilation was
+    applied). }
+  \label{img:gui_morph}
+\end{figure}
+
+\begin{figure}
+  \centering
+    \includegraphics[width=1\textwidth, frame]{src/gui_hough}
+  \caption{Visualization of the results of all geometrical
+    operations. It can be seen that although some triangles are found,
+    none classifies as a yield sign.}
+  \label{img:gui_hough}
+\end{figure}
+
+
+\section{Working with videos}
+
+When applying the system to videos, the pipeline can be used
+frame-wise for doing a full scan for yield signs. Computationally this
+is rather expensive. For speeding up the computation, knowledge
+extracted from prior frames can be used. If a yield sign is found, it
+is most likely to be found on the succeeding frames near its old
+position. Thus the region for checking for a sign can be reduced to
+this ``region of interest'' (ROI). To make the system stable and allow
+for detecting multiple ROIs at once the following algorithm was
+devised and implemented.
+
+Every ROI is described by two points \( p_0 = (y_0, x_0), p_1 = (y_1,
+x_1) \) which spans a rectangle with a prior detected yield sign. Also
+each ROI has an integer value \( > 1 \) assigned which is referred to
+as its health. Now for every frame - as long as no ROI was detected in
+the previous frame - a full scan is commenced. If no yield sign is
+detected, the next frame is read. If one or more yield signs were
+found a ROI is initialized for each yield signs. ROIs must not overlap
+as same traffic signs always have some physical distance. The
+succeeding frame only scans the areas defined by the ROIs currently
+held. Every so often a full scan is done nonetheless to detect
+additional yield signs. If no yield sign could be found inside a ROI
+it is not immediately discarded, but its health is decremented. This
+prevents premature deletion of ROIs due to temporary occlusion or
+other failure of the system. If the health of a ROI reaches zero it is
+considered dead and discarded. This happens mostly when the sign is no
+longer visible.
+
+\newgeometry{top=1cm}
+\begin{figure}
+  \begin{subfigure}[t]{1\textwidth}
+    \includegraphics[width=1\textwidth]{src/roi/0}
+    \subcaption{\centering No ROI was found so the full image is
+      scanned for yield signs.\vspace{.3cm}}
+  \end{subfigure}
+  \begin{subfigure}[t]{1\textwidth}
+    \includegraphics[width=1\textwidth]{src/roi/1}
+    \subcaption{\centering The first of two yield signs was found. A
+      ROI is established and only its area is scanned.\vspace{.3cm}}
+  \end{subfigure}
+  \begin{subfigure}[t]{1\textwidth}
+    \includegraphics[width=1\textwidth]{src/roi/2}
+    \subcaption{\centering After one of the sporadic full scans, the
+      second yield sign was found and two ROIs exist.\vspace{.3cm}}
+  \end{subfigure}
+  \begin{subfigure}[t]{1\textwidth}
+    \includegraphics[width=1\textwidth]{src/roi/3}
+    \subcaption{\centering The right sign is no longer visible and its
+      ROI loses health indicated by the circle which has a lower gray
+      value.\vspace{.3cm}}
+  \end{subfigure}
+  \begin{subfigure}[t]{1\textwidth}
+    \includegraphics[width=1\textwidth]{src/roi/5}
+    \subcaption{\centering Both ROIs died and the systems resumes to
+      do full scans.\vspace{.3cm}}
+  \end{subfigure}
+\end{figure}
+\restoregeometry
+
 \pagebreak
 \chapter{Evaluation}
 \label{chap:evaluation}
-{\color{red}{To be written}}
 
-\section{Performance}
-{\color{red}{To be written}}
+The system correctly identifies yield signs for nearly all examples
+that were given to it. It correctly discriminates yield signs from
+other warning signs such as construction work signs etc. Even for
+images which have many other red objects in it, the detection stays
+quite stable mainly due to the component labeling based filling. As
+this is only a proof of concept implementation no reliable
+misclassification rate can be supplied as even building the ground
+truth would go beyond the scope of this project.
 
-\section{Application to Videos}
-{\color{red}{To be written (ROI, Frame-Skipping)}}
+Video processing - although technically not implemented for real time
+use - proved to perform promising. The current implementation is
+written in Python which has some overhead intrinsically. The used
+hough implementation is not the fast hough implementation described in
+\ref{sec:fast_hough}. Half of the computation time is needed to do the
+hough transform and this would improve dramatically when switching
+implementations. Currently, video processing for full scans handles
+around 20 frames per second on one 3.3GHz processor. This means if
+only every second frame would be used (which does not decrease the
+quality of detection) a steady processing of 40 frames per second for
+480p video material is possible. When working with ROIs, even the
+current implementation handles about 80 frames per second.
 
-\section{Prospect}
-{\color{red}{To be written (Other approaches: k-means clustering for
-    segmentation, Otsu? ...)}}
-
+The system behaves reasonably well for easy detection problems but
+fails in bad light conditions or for obfuscated signs. The most
+prominent reason for failure can easily be pinpointed to the color
+segmentation step. It is crucial to detect the correct red to have a
+distinct form to work with. Nearly all real-world problems do not
+exhibit this property. The following chapter concludes with proposals
+to improve the current system.
 
 \pagebreak
 \chapter{Conclusion}
 \label{chap:conclusion}
 
+The results show that the pipeline is able to detect and classify
+yield signs in an ideal world. In its current form it is not able to
+cope with real world problems stable enough as it would be needed for
+full or semi autonomous driving vehicles or assistance systems.
+
+As mentioned, color segmentation is crucial for a correctly working
+pipeline. The appearance of red changes drastically when captured
+under bad light conditions, with cheap camera sensors or simply when
+the sign itself is becoming old. It must be explored whether there is
+a more stable feature to rely the pipeline on.
+
+To speed up computation for videos some areas of the video are not
+important. Given the camera is constantly in the same position
+pointing straight to the front of the car, only the top-left and
+top-right areas are necessary to analyze. Also, as mentioned before,
+an implementation in a language without interpreter overhead or
+utilizing a GPU accelerated system will speed up the computation.
+
+Using heuristics to classify yield signs is a somewhat error prone
+approach. Additionally it does not scale for use with other types of
+road signs. For each sign a new method must be devised and this will
+lead to both classification errors and a system which is not easily
+maintainable. Recent advances in machine learning lead to highly
+effective topologies for convolutional neural networks trained to
+classify images or objects in images. They offer a more general
+approach for classification.
+
+\begin{figure}
+  \centering
+    \includegraphics[width=1\textwidth, frame]{src/hardone/merged}
+  \caption{The whole pipeline in one picture}
+  \label{img:hardone}
+\end{figure}
 
 \end{document}
