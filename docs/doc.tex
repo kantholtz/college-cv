@@ -61,11 +61,11 @@
 This document describes the implementation of a system to detect yield
 signs from images and videos. It is a proof of concept realization
 based on a course of machine vision at RheinMain University of Applied
-Sciences in 2017. The scope of the task is to detect yield signs and
-to implement some operations on images including but not restricted to
-color segmentation, morphological operations, hough transform for
-lines and highlighting found yield signs. This chapter describes the
-model, requirements and notation used in this document. Chapter
+Sciences in 2017. The scope of the task is to implement some
+operations on images including but not restricted to color
+segmentation, morphological operations, hough transform for lines and
+highlighting found yield signs. This chapter describes the model,
+requirements and notation used in this document. Chapter
 \ref{chap:pipeline} outlines a pipeline of operations and all utilized
 algorithms and heuristics for detecting yield signs. The following
 chapter \ref{chap:implementation} describes the implementation of a
@@ -146,24 +146,28 @@ sign.
 \begin{figure}
   \centering
     \includegraphics[width=1\textwidth]{src/pipeline}
-  \caption{A high level overview of the processing pipeline}
+  \caption{A high level overview of the processing pipeline. The
+    various steps can be grouped by the domain they are working
+    on. The first group handles colored images, the second group works
+    with binary images and the third group with abstract geometrical
+    representations.}
   \label{img:pipeline}
 \end{figure}
 
-The pipeline itself consists of the following components: First the
-red color component of the image is extracted. A threshold is
-introduced to create a binary image masking all red areas. This is
-described in section \ref{sec:pipeline_binarization}. The next
-component applies morphological operations to enhance the quality of
-the extracted areas. A description of this can be found in section
+The pipeline itself consists of the following steps: First the image
+is segmented to extract areas which resemble the red color of a yield
+sign. A threshold is introduced to create a binary image masking all
+those areas. This is described in section
+\ref{sec:pipeline_binarization}. The next step applies morphological
+operations to enhance the quality of the extracted areas. A
+description of this can be found in section
 \ref{sec:pipeline_morph}. The following section
 \ref{sec:pipeline_complab} describes how the amount of relevant red
 areas can be greatly reduced by filling the ``background'' of the
 image utilizing component labeling. As this proved quite useful but
 hindered detection completely for some corner cases, this step can be
 enabled optionally. The now remaining relevant areas are transformed
-in such way that their shapes are defined by their edges
-{\color{red}{(either dilation + xor or sobel)}}. Section
+in such way that their shapes are defined by their edges. Section
 \ref{sec:pipeline_edgedet} describes this and the succeeding section
 \ref{sec:pipeline_linedet} explains how this information can be used
 to detect and extract lines from the image. After all lines are
@@ -171,9 +175,6 @@ extracted section \ref{sec:pipeline_yielddet} discusses how some
 heuristics are applied to determine all relevant triangles and
 classify whether those triangles could be yield signs. A graphical
 depiction of this process is given in \ref{img:pipeline}.
-
-{\color{red}{To do: Apply a median filter before or after
-    segmentation?}}
 
 
 \section{Segmentation}
@@ -693,7 +694,12 @@ distorted by perspective.
 
 
 \pagebreak
+\chapter{Implementation}
+\label{chap:implementation}
+
+\pagebreak
 \chapter{Evaluation}
+\label{chap:evaluation}
 {\color{red}{To be written}}
 
 \section{Performance}
@@ -709,6 +715,7 @@ distorted by perspective.
 
 \pagebreak
 \chapter{Conclusion}
+\label{chap:conclusion}
 
 
 \end{document}
