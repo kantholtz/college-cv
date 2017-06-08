@@ -14,7 +14,8 @@
 \usepackage{graphicx, subcaption, float}
 \restylefloat{figure}
 
-\usepackage{wrapfig}
+\usepackage{wrapfig}            % for floating images
+\usepackage[export]{adjustbox}  % for frames
 
 \begin{document}
 
@@ -431,9 +432,21 @@ effective it has one big drawback: As soon as the detected yield sign
 shape is not closed the whole detection system fails immediately. This
 does not happen otherwise as even without a closed form, the other
 edges are prominent enough to allow detection. Thus this step can
-optionally be enabled or disabled.
+optionally be enabled or disabled. An example where this step proves
+quite useful can be found in figure \ref{img:filling}
 
-{\color{red}{To do: Example pictures}}
+\begin{figure}
+  \centering
+    \includegraphics[width=.7\textwidth, frame]{src/comp/merged}
+  \caption{This image exposes multiple problems for detection as both
+    a lot of more or less red objects can be found and it was captured
+    at dawn where due to the low light intensity the color variance
+    diminishes. Note however that due to the filling step utilizing
+    component labeling most of the interfering objects vanish. The
+    middle image exhibits the state after applying segmentation and
+    closing.}
+  \label{img:filling}
+\end{figure}
 
 
 \section{Edge Detection}
@@ -567,7 +580,7 @@ distorted by perspective.
 
 
 \pagebreak
-\chapter{Evaluation and Conclusion}
+\chapter{Evaluation}
 {\color{red}{To be written}}
 
 \section{Performance}
@@ -579,6 +592,10 @@ distorted by perspective.
 \section{Prospect}
 {\color{red}{To be written (Other approaches: k-means clustering for
     segmentation, Otsu? ...)}}
+
+
+\pagebreak
+\chapter{Conclusion}
 
 
 \end{document}
