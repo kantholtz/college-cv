@@ -46,12 +46,11 @@ class MainWindow(qtw.QMainWindow):
 
         return menu
 
-    def _iterate_mods(self):
-        i = 0
+    def _mods(self):
+        mods = []
         for tab in self.pipeline:
-            for mod in tab:
-                yield i, mod
-                i += 1
+            mods += [mod for mod in tab]
+        return mods
 
     # --- handler
 
@@ -63,12 +62,20 @@ class MainWindow(qtw.QMainWindow):
             self.load_file(fname)
 
     def _handle_save_file(self):
-        for i, mod in self._iterate_mods():
-            fname = 'img/out_%d_%s.png' % (i, mod.name)
-            log.info('saving %s', fname)
-            skio.imsave(fname, mod.arr.astype(np.uint8))
+        log.info('saving images')
 
-        skio.imsave('img/out_result.png', self.pipeline.tabs[-1].result)
+        i = 0
+        for mod in self._mods()[:-1]:
+            fname = 'out.%d.%s.png' % (i, mod.name)
+            skio.imsave(fname, mod.arr.astype(np.uint8))
+            i += 1
+
+        tab = self.pipeline.tabs[-1]
+        skio.imsave('out.%d.hough.png' % i, tab.widget.view.image.arr)
+
+        i += 1
+        skio.imsave('out.%d.result.png' % i, tab.result)
+        log.info('done saving images')
 
     # --- initialization
 
