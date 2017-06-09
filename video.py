@@ -69,12 +69,13 @@ def _draw_roi(arr, i, roi, val):
     # clockwise from topleft
     rr, cc = skd.polygon_perimeter(
         (y0, y0, y1, y1, y0),
-        (x0, x1, x1, x0, x0))
+        (x0, x1, x1, x0, x0),
+        shape=arr[i].shape)
 
     arr[i, rr, cc] = val
 
     # color indicator for life decay
-    rr, cc = skd.circle(y0, x0, 5)
+    rr, cc = skd.circle(y0, x0, 5, shape=arr[i].shape)
     arr[i, rr, cc] = val * (roi.health / ROI_LIFESPAN)
     rr, cc = skd.circle_perimeter(y0, x0, 5)
     arr[i, rr, cc] = val
@@ -98,18 +99,16 @@ def _find_rois(buf, frame, barycenters, pois):
     return rois
 
 
-def _scan_full(buf, frame, i, pipe, draw=True):
+def _scan_full(buf, frame, i, pipe):
     segments = pipe.binarize(frame.astype(np.int64))
 
-    if draw:
-        buf.binary[i] = segments
+    buf.binary[i] = segments
     if pipe.binary and not pipe.edges:
         return []
 
     edges = pipe.edge(segments)
 
-    if draw:
-        buf.edges[i] = edges
+    buf.edges[i] = edges
 
     if pipe.edges:
         return []
@@ -157,8 +156,7 @@ def _process(buf, frame, i, pipe, rois):
     rescan = i % 15 == 0
     no_rois = len(rois) == 0
     if rescan or no_rois:
-        draw = not rescan and no_rois
-        new_rois += _scan_full(buf, frame, i, pipe, draw=draw)
+        new_rois += _scan_full(buf, frame, i, pipe)
 
     # roi scan
     for roi in rois:
