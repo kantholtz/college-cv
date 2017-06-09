@@ -197,6 +197,10 @@ class Binarize(Module):
 class Morph(Module):
 
     @property
+    def structure(self) -> np.ndarray:
+        return self._structure
+
+    @property
     def iterations(self):
         return self._iterations
 
@@ -206,6 +210,9 @@ class Morph(Module):
 
     def __init__(self, name: str):
         super().__init__(name)
+        self._structure = np.ones((3, 3), dtype=np.bool)
+
+        # defaults
         self._iterations = 1
 
 
@@ -225,7 +232,10 @@ class Dilate(Morph):
             return src
 
         tgt = np.zeros(src.shape, dtype=np.uint8)
-        tgt[scnd.binary_dilation(src, iterations=self.iterations)] = 255
+        struc = scnd.binary_dilation(
+            src, structure=self.structure, iterations=self.iterations)
+
+        tgt[struc] = 255
         return tgt
 
 
@@ -245,7 +255,9 @@ class Erode(Morph):
             return src
 
         tgt = np.zeros(src.shape, dtype=np.uint8)
-        tgt[scnd.binary_erosion(src, iterations=self.iterations)] = 255
+        struc = scnd.binary_erosion(
+            src, structure=self.structure, iterations=self.iterations)
+        tgt[struc] = 255
         return tgt
 
 

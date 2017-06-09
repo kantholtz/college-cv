@@ -68,6 +68,8 @@ class MainWindow(qtw.QMainWindow):
             log.info('saving %s', fname)
             skio.imsave(fname, mod.arr.astype(np.uint8))
 
+        skio.imsave('img/out_result.png', self.pipeline.tabs[-1].result)
+
     # --- initialization
 
     def _init_file_menu(self, menu: qtw.QMenuBar) -> None:
