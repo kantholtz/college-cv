@@ -210,7 +210,8 @@ class Morph(Module):
 
     def __init__(self, name: str):
         super().__init__(name)
-        self._structure = np.ones((3, 3), dtype=np.bool)
+        # self._structure = np.ones((3, 3), dtype=np.bool)
+        self._structure = None
 
         # defaults
         self._iterations = 1
