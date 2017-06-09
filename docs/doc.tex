@@ -767,7 +767,7 @@ as same traffic signs always have some physical distance. The
 succeeding frame only scans the areas defined by the ROIs currently
 held. Every so often a full scan is done nonetheless to detect
 additional yield signs. If no yield sign could be found inside a ROI
-it is not immediately discarded, but its health is decremented. This
+it is not discarded immediately, but its health is decremented. This
 prevents premature deletion of ROIs due to temporary occlusion or
 other failure of the system. If the health of a ROI reaches zero it is
 considered dead and discarded. This happens mostly when the sign is no
