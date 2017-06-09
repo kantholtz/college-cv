@@ -417,7 +417,7 @@ class Hough(Tab):
     def _draw_result(self):
         tgt = self._mod_hough.arr / 5
         self._draw_triangles(tgt)
-        return tgt
+        return tgt.astype(np.uint8)
 
     def _init_gui(self, arr: np.ndarray):
         self._widget = gui_image.ImageModule(arr)
