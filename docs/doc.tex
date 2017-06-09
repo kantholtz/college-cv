@@ -158,7 +158,7 @@ The pipeline itself consists of the following steps: First the image
 is segmented to extract areas which resemble the red color of a yield
 sign. A threshold is introduced to create a binary image masking all
 those areas. This is described in section
-\ref{sec:pipeline_binarization}. The next step applies morphological
+\ref{sec:pipeline_segmentation}. The next step applies morphological
 operations to enhance the quality of the extracted areas. A
 description of this can be found in section
 \ref{sec:pipeline_morph}. The following section
@@ -178,7 +178,7 @@ depiction of this process is given in \ref{img:pipeline}.
 
 
 \section{Segmentation}
-\label{sec:pipeline_binarization}
+\label{sec:pipeline_segmentation}
 
 The first step of the whole pipeline consists of extracting the red
 color from the colored input image \textit{source}. Thus a mapping for
@@ -662,7 +662,7 @@ triangle having the shape of the detected one. Both images are binary
 images where the triangles are white. Let \( ref \) be the reference
 triangle image and \( tri \) the detected triangle, \( h \) the
 reference images' height and \( w \) the reference images' width, then
-the difference between the two is defined in
+the difference between the two is defined in equation
 \ref{eq:detect_patmatch}. The resulting real number \( \Delta \in [0,
   1] \) expresses the similarity between the two and the larger that
 value gets the more different the triangles are. Whether the triangle
@@ -810,25 +810,26 @@ longer visible.
 
 The system correctly identifies yield signs for nearly all examples
 that were given to it. It correctly discriminates yield signs from
-other warning signs such as construction work signs etc. Even for
-images which have many other red objects in it, the detection stays
-quite stable mainly due to the component labeling based filling. As
-this is only a proof of concept implementation no reliable
-misclassification rate can be supplied as even building the ground
-truth would go beyond the scope of this project.
+other warning signs such as construction work signs etc. most of the
+time. Even for images which have many other red objects in it, the
+detection stays quite stable mainly due to the component labeling
+based filling. As this is only a proof of concept implementation no
+reliable misclassification rate can be supplied as even building the
+ground truth would go beyond the scope of this project.
 
 Video processing - although technically not implemented for real time
 use - proved to perform promising. The current implementation is
 written in Python which has some overhead intrinsically. The used
 hough implementation is not the fast hough implementation described in
-\ref{sec:fast_hough}. Half of the computation time is needed to do the
-hough transform and this would improve dramatically when switching
-implementations. Currently, video processing for full scans handles
-around 20 frames per second on one 3.3GHz processor. This means if
-only every second frame would be used (which does not decrease the
-quality of detection) a steady processing of 40 frames per second for
-480p video material is possible. When working with ROIs, even the
-current implementation handles about 80 frames per second.
+section \ref{sec:fast_hough}. Half of the computation time is needed
+to do the hough transform and this would improve dramatically when
+switching implementations. Currently, video processing for full scans
+handles around 18 frames per second on one 3.3GHz processor. This
+means if only every second frame would be used (which does not
+decrease the quality of detection) a steady processing of nearly 40
+frames per second for 480p video material is possible. When working
+with ROIs, even the current implementation handles about 60 to 80
+frames per second.
 
 The system behaves reasonably well for easy detection problems but
 fails in bad light conditions or for obfuscated signs. The most
@@ -837,6 +838,7 @@ segmentation step. It is crucial to detect the correct red to have a
 distinct form to work with. Nearly all real-world problems do not
 exhibit this property. The following chapter concludes with proposals
 to improve the current system.
+
 
 \pagebreak
 \chapter{Conclusion}
